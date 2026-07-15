@@ -35,11 +35,14 @@ export default function Auth() {
       
       // Save role flag (e.g., 'admin') locally to read in the header container
       if (userData && userData.role) {
-        localStorage.setItem('userRole', userData.role);
-      } else {
-        // Fallback placeholder condition for verification
-        localStorage.setItem('userRole', 'admin'); 
-      }
+  localStorage.setItem('userRole', userData.role);
+  localStorage.setItem('isLoggedIn', 'true');
+  localStorage.setItem('userEmail', userData.email || payload.email);
+} else {
+  localStorage.setItem('userRole', 'admin');
+  localStorage.setItem('isLoggedIn', 'true');
+  localStorage.setItem('userEmail', payload.email);
+}
 
       // Redirect directly to home feed page
       navigate('/');
