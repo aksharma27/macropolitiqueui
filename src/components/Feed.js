@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Plus, Image as ImageIcon, LayoutDashboard } from 'lucide-react';
+import { ArrowLeft, NotebookPen, Image as ImageIcon, LayoutDashboard } from 'lucide-react';
 import { fetchArticles, postArticle } from '../api/axiosClient';
+import LogoutButton from './LogoutButton';
 import { useNavigate } from 'react-router-dom';
 
 export default function Feed() {
@@ -173,11 +174,17 @@ export default function Feed() {
       {!selectedArticle && !isCreating && (
   <header className="fixed top-0 left-1 right-1 z-50 bg-black/90 backdrop-blur-sm border-b border-neutral-900">
     <div className="w-full h-16 flex items-center justify-between px-4 lg:px-[5px]">
-      <h1 className="text-2xl font-bold tracking-tight text-white">
-        CFR.MINIMAL
+      <h1 className="text-2xl font-bold tracking-tight text-white" style={{ fontFamily: "'Dancing Script', cursive", fontSize: '1.75rem' }}>
+        MacroPolitique
       </h1>
 
       <div className="flex items-center gap-3">
+
+        {/* Logout Button - Only show if logged in */}
+        {(localStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('userRole')) && (
+          <LogoutButton />
+        )}
+
         {/* Dashboard Button - Only show if logged in */}
         {localStorage.getItem('isLoggedIn') && localStorage.getItem('userRole') && (
   <button 
@@ -191,10 +198,10 @@ export default function Feed() {
         
         <button 
           onClick={() => setIsCreating(true)}
-          className="cursor-pointer flex items-center gap-2 bg-neutral-900 hover:bg-neutral-800 px-4 py-2 rounded-full transition-colors text-sm text-white"
+          className="cursor-pointer flex items-center gap-2 bg-neutral-600 hover:bg-neutral-800 px-4 py-2 rounded-full transition-colors text-sm text-white"
         >
-          <Plus size={16} />
-          <span className="hidden sm:inline">Post an Article</span>
+          <NotebookPen size={16} />
+          <span className="hidden sm:inline">Write For Us</span>
         </button>
       </div>
     </div>

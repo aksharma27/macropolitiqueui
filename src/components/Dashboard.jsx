@@ -1,16 +1,293 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, CheckCircle, Clock, Edit3, X, Save, RefreshCw } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Clock, Edit3, Save, Send, Eye, X, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import apiClient from '../api/axiosClient';
+import LogoutButton from './LogoutButton';
 import { approvePost, updatePost, fetchAllPosts } from '../api/axiosClient';
 
+// Toast Component
+function Toast({ message, type, onClose }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className={`fixed top-20 left-1/2 transform -translate-x-1/2 z-50 backdrop-blur-sm border px-6 py-3 rounded-full shadow-lg text-sm ${
+        type === 'success' 
+          ? 'bg-green-900/90 border-green-700 text-green-200' 
+          : 'bg-red-900/90 border-red-700 text-red-200'
+      }`}
+    >
+      {message}
+    </motion.div>
+  );
+}
+
+// Full Article Edit/View Component
+function ArticleFullView({ post, onBack, onUpdate }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: post.title,
+    content: post.content,
+    author: post.author,
+    authorEmail: post.authorEmail
+  });
+  const [loading, setLoading] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
+
+  const formatDate = (isoString) => {
+    if (!isoString) return '';
+    return new Date(isoString).toLocaleString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit'
+    });
+  };
+
+  const getStatusBadge = (published) => {
+    if (published) {
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-green-900/30 text-green-400 border border-green-800">
+          <CheckCircle size={12} />
+          Published
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-yellow-900/30 text-yellow-400 border border-yellow-800">
+        <Clock size={12} />
+        Pending Review
+      </span>
+    );
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      setLoading(true);
+      const updatedPost = await updatePost(post._id, {
+        ...editForm,
+        published: false
+      });
+      onUpdate(updatedPost.post);
+      showToast('Draft saved successfully!');
+    } catch (error) {
+      console.error("Error saving draft:", error);
+      showToast('Failed to save draft. Please try again.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveAndPublish = async () => {
+    try {
+      setLoading(true);
+      const updatedPost = await updatePost(post._id, {
+        ...editForm,
+        published: true
+      });
+      onUpdate(updatedPost.post);
+      showToast('Article published successfully!');
+      setTimeout(() => onBack(), 1500);
+    } catch (error) {
+      console.error("Error publishing post:", error);
+      showToast('Failed to publish. Please try again.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApproveOnly = async () => {
+    try {
+      setLoading(true);
+      await approvePost(post._id);
+      const updatedPost = { ...post, published: true };
+      onUpdate(updatedPost);
+      showToast('Post approved successfully!');
+      setTimeout(() => onBack(), 1500);
+    } catch (error) {
+      console.error("Error approving post:", error);
+      showToast('Failed to approve post. Please try again.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-black text-white selection:bg-neutral-800">
+      {/* Toast Messages */}
+      <AnimatePresence>
+        {toast && (
+          <Toast 
+            message={toast.message} 
+            type={toast.type} 
+            onClose={() => setToast(null)} 
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Header */}
+      <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-md border-b border-neutral-900">
+        <div className="w-full h-16 flex items-center justify-between px-4 lg:px-8">
+          <button 
+            onClick={onBack}
+            className="flex items-center space-x-2 text-neutral-400 hover:text-white transition-colors py-2"
+          >
+            <ArrowLeft size={15} /> <span>Back to Dashboard</span>
+          </button>
+          
+          <div className="flex items-center gap-2">
+            {getStatusBadge(post.published)}
+            <LogoutButton />
+          </div>
+        </div>
+      </div>
+
+      {/* Article Content */}
+      <div className="max-w-4xl mx-auto mt-8 px-4 sm:px-6 lg:px-8">
+        {isEditing ? (
+          /* Edit Mode */
+          <div className="space-y-6">
+            <input
+              type="text"
+              value={editForm.title}
+              onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+              className="w-full bg-transparent border-b border-neutral-800 px-0 py-4 text-2xl md:text-4xl text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
+              placeholder="Article Title"
+            />
+            
+            <div className="flex gap-4">
+              <input
+                type="text"
+                value={editForm.author}
+                onChange={(e) => setEditForm({ ...editForm, author: e.target.value })}
+                className="flex-1 bg-transparent border-b border-neutral-800 px-0 py-3 text-lg text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
+                placeholder="Author Name"
+              />
+              <input
+                type="email"
+                value={editForm.authorEmail}
+                onChange={(e) => setEditForm({ ...editForm, authorEmail: e.target.value })}
+                className="flex-1 bg-transparent border-b border-neutral-800 px-0 py-3 text-lg text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
+                placeholder="Author Email"
+              />
+            </div>
+
+            <textarea
+              value={editForm.content}
+              onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
+              rows="15"
+              className="w-full bg-neutral-900/50 border border-neutral-800 rounded-xl p-4 text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-500 transition-colors resize-y leading-relaxed text-lg"
+              placeholder="Write your article content here..."
+            />
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-4">
+              <button
+                onClick={handleSaveDraft}
+                disabled={loading}
+                className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-white font-medium py-3 rounded-xl transition-colors disabled:opacity-50"
+              >
+                <Save size={18} />
+                Save Draft
+              </button>
+              <button
+                onClick={handleSaveAndPublish}
+                disabled={loading}
+                className="flex-1 flex items-center justify-center gap-2 bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold py-3 rounded-xl transition-colors disabled:opacity-50"
+              >
+                <Send size={18} />
+                Save & Publish
+              </button>
+              <button
+                onClick={() => setIsEditing(false)}
+                disabled={loading}
+                className="flex-1 flex items-center justify-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-medium py-3 rounded-xl transition-colors border border-neutral-800 disabled:opacity-50"
+              >
+                <X size={18} />
+                Cancel Edit
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* View Mode */
+          <>
+            <div className="text-center mb-8">
+              <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-4 tracking-tight">{post.title}</h1>
+              <div className="mb-6 border-b border-neutral-800 pb-4">
+                <p className="text-neutral-300 font-medium">By {post.author}</p>
+                <p className="text-neutral-500 text-sm">{post.authorEmail}</p>
+                <div className="mt-2 flex items-center justify-center gap-4">
+                  <p className="text-neutral-500 text-sm">
+                    Created: {formatDate(post.createdAt)}
+                  </p>
+                  {post.published && (
+                    <p className="text-neutral-500 text-sm">
+                      Published: {formatDate(post.publishedOn)}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+            
+            {post.imageUrl && (
+              <div className="mb-8">
+                <img 
+                  src={post.imageUrl} 
+                  alt="Article cover" 
+                  className="w-full h-56 md:h-80 lg:h-96 rounded-lg object-cover" 
+                />
+              </div>
+            )}
+            
+            <div className="text-left text-neutral-300 leading-8 text-lg pb-8 break-words">
+              {post.content}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex flex-col sm:flex-row gap-3 pb-12">
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-white font-medium py-3 rounded-xl transition-colors"
+              >
+                <Edit3 size={18} />
+                Edit Article
+              </button>
+              {!post.published && (
+                <button
+                  onClick={handleApproveOnly}
+                  disabled={loading}
+                  className="flex-1 flex items-center justify-center gap-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 font-medium py-3 rounded-xl transition-colors border border-green-800/50 disabled:opacity-50"
+                >
+                  <CheckCircle size={18} />
+                  Approve Only
+                </button>
+              )}
+              {post.published && (
+                <div className="flex-1 flex items-center justify-center gap-2 bg-green-900/20 text-green-400 font-medium py-3 rounded-xl border border-green-800/50">
+                  <CheckCircle size={18} />
+                  Published ✓
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Main Dashboard Component
 export default function Dashboard() {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPost, setSelectedPost] = useState(null);
-  const [editingPost, setEditingPost] = useState(null);
-  const [editForm, setEditForm] = useState({ title: '', content: '', published: false });
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -67,34 +344,11 @@ export default function Dashboard() {
     }
   };
 
-  const handleEditClick = (post, e) => {
-    e.stopPropagation();
-    setEditingPost(post._id);
-    setEditForm({
-      title: post.title,
-      content: post.content,
-      published: post.published
-    });
-  };
-
-  const handleEditSave = async (postId, e) => {
-    e.stopPropagation();
-    try {
-      const updatedPost = await updatePost(postId, editForm);
-      setPosts(posts.map(post => 
-        post._id === postId ? updatedPost.post : post
-      ));
-      setEditingPost(null);
-      showSuccess('Post updated successfully!');
-    } catch (error) {
-      console.error("Error updating post:", error);
-      showError("Failed to update post. Please try again.");
-    }
-  };
-
-  const handleCancelEdit = (e) => {
-    e.stopPropagation();
-    setEditingPost(null);
+  const handlePostUpdate = (updatedPost) => {
+    setPosts(posts.map(post => 
+      post._id === updatedPost._id ? updatedPost : post
+    ));
+    setSelectedPost(updatedPost);
   };
 
   const showSuccess = (message) => {
@@ -141,46 +395,11 @@ export default function Dashboard() {
 
   if (selectedPost) {
     return (
-      <div className="min-h-screen bg-black text-white selection:bg-neutral-800">
-        <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-md border-b border-neutral-900 h-15 flex items-center px-4 lg:px-8">
-          <button 
-            onClick={() => setSelectedPost(null)}
-            className="flex items-center space-x-2 text-neutral-400 hover:text-white transition-colors py-2"
-          >
-            <ArrowLeft size={15} /> <span>Back to Dashboard</span>
-          </button>
-        </div>
-
-        <div className="max-w-4xl mx-auto mt-8 px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-4 tracking-tight">{selectedPost.title}</h1>
-            <div className="mb-6 border-b border-neutral-800 pb-4">
-              <p className="text-neutral-300 font-medium">By {selectedPost.author}</p>
-              <p className="text-neutral-500 text-sm">{selectedPost.authorEmail}</p>
-              <div className="mt-2 flex items-center justify-center gap-4">
-                <p className="text-neutral-500 text-sm">
-                  Created: {formatDate(selectedPost.createdAt)}
-                </p>
-                {getStatusBadge(selectedPost.published)}
-              </div>
-            </div>
-          </div>
-          
-          {selectedPost.imageUrl && (
-            <div className="mb-8">
-              <img 
-                src={selectedPost.imageUrl} 
-                alt="Article cover" 
-                className="w-full h-56 md:h-80 lg:h-96 rounded-lg object-cover" 
-              />
-            </div>
-          )}
-          
-          <div className="text-left text-neutral-300 leading-8 text-lg pb-12 break-words">
-            {selectedPost.content}
-          </div>
-        </div>
-      </div>
+      <ArticleFullView
+        post={selectedPost}
+        onBack={() => setSelectedPost(null)}
+        onUpdate={handlePostUpdate}
+      />
     );
   }
 
@@ -254,10 +473,10 @@ export default function Dashboard() {
             {/* Table Header */}
             <div className="hidden lg:grid grid-cols-12 gap-4 px-4 py-3 text-xs font-medium text-neutral-500 uppercase tracking-wider border-b border-neutral-900">
               <div className="col-span-2">Status</div>
-              <div className="col-span-3">Title</div>
+              <div className="col-span-4">Title</div>
               <div className="col-span-2">Author</div>
               <div className="col-span-2">Dates</div>
-              <div className="col-span-3">Actions</div>
+              <div className="col-span-2">Actions</div>
             </div>
 
             {/* Posts List */}
@@ -272,82 +491,36 @@ export default function Dashboard() {
                 >
                   {/* Mobile View */}
                   <div className="lg:hidden p-4">
-                    {editingPost === post._id ? (
-                      /* Mobile Edit Form */
-                      <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                        <input
-                          type="text"
-                          value={editForm.title}
-                          onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                          className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-neutral-500"
-                          placeholder="Title"
-                        />
-                        <textarea
-                          value={editForm.content}
-                          onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
-                          rows="4"
-                          className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-neutral-500 resize-none"
-                          placeholder="Content"
-                        />
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={editForm.published}
-                            onChange={(e) => setEditForm({ ...editForm, published: e.target.checked })}
-                            className="rounded border-neutral-700 bg-neutral-900"
-                          />
-                          <span className="text-xs text-neutral-400">Published</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            onClick={(e) => handleEditSave(post._id, e)}
-                            className="flex-1 flex items-center justify-center gap-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm transition-colors"
-                          >
-                            <Save size={14} /> Save
-                          </button>
-                          <button
-                            onClick={handleCancelEdit}
-                            className="flex-1 flex items-center justify-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-white px-3 py-2 rounded-lg text-sm transition-colors"
-                          >
-                            <X size={14} /> Cancel
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      /* Mobile View */
-                      <>
-                        <div className="flex items-start justify-between mb-2">
-                          <button
-                            onClick={() => setSelectedPost(post)}
-                            className="text-left font-medium text-white hover:text-neutral-300 transition-colors pr-4"
-                          >
-                            {post.title}
-                          </button>
-                          {getStatusBadge(post.published)}
-                        </div>
-                        <p className="text-sm text-neutral-400 mb-2">By {post.author}</p>
-                        <div className="text-xs text-neutral-600 mb-3">
-                          <p>Created: {formatDate(post.createdAt)}</p>
-                          {post.published && <p>Published: {formatDate(post.publishedOn)}</p>}
-                        </div>
-                        <div className="flex gap-2">
-                          {!post.published && (
-                            <button
-                              onClick={(e) => handleApprove(post._id, e)}
-                              className="flex items-center gap-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 px-3 py-1.5 rounded-lg text-xs transition-colors border border-green-800/50"
-                            >
-                              <CheckCircle size={12} /> Approve
-                            </button>
-                          )}
-                          <button
-                            onClick={(e) => handleEditClick(post, e)}
-                            className="flex items-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-3 py-1.5 rounded-lg text-xs transition-colors"
-                          >
-                            <Edit3 size={12} /> Edit
-                          </button>
-                        </div>
-                      </>
-                    )}
+                    <div className="flex items-start justify-between mb-2">
+                      <button
+                        onClick={() => setSelectedPost(post)}
+                        className="text-left font-medium text-white hover:text-neutral-300 transition-colors pr-4"
+                      >
+                        {post.title}
+                      </button>
+                      {getStatusBadge(post.published)}
+                    </div>
+                    <p className="text-sm text-neutral-400 mb-2">By {post.author}</p>
+                    <div className="text-xs text-neutral-600 mb-3">
+                      <p>Created: {formatDate(post.createdAt)}</p>
+                      {post.published && <p>Published: {formatDate(post.publishedOn)}</p>}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedPost(post)}
+                        className="flex items-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-3 py-1.5 rounded-lg text-xs transition-colors"
+                      >
+                        <Eye size={12} /> View/Edit
+                      </button>
+                      {!post.published && (
+                        <button
+                          onClick={(e) => handleApprove(post._id, e)}
+                          className="flex items-center gap-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 px-3 py-1.5 rounded-lg text-xs transition-colors border border-green-800/50"
+                        >
+                          <CheckCircle size={12} /> Approve
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Desktop View */}
@@ -355,7 +528,7 @@ export default function Dashboard() {
                     <div className="col-span-2">
                       {getStatusBadge(post.published)}
                     </div>
-                    <div className="col-span-3">
+                    <div className="col-span-4">
                       <button
                         onClick={() => setSelectedPost(post)}
                         className="font-medium text-white hover:text-neutral-300 transition-colors truncate text-left w-full"
@@ -371,66 +544,23 @@ export default function Dashboard() {
                       <p>Created: {formatDate(post.createdAt)}</p>
                       {post.published && <p>Published: {formatDate(post.publishedOn)}</p>}
                     </div>
-                    <div className="col-span-3">
-                      {editingPost === post._id ? (
-                        /* Desktop Edit Form */
-                        <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="text"
-                            value={editForm.title}
-                            onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-                            className="w-full bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-neutral-500"
-                            placeholder="Title"
-                          />
-                          <textarea
-                            value={editForm.content}
-                            onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
-                            rows="2"
-                            className="w-full bg-neutral-900 border border-neutral-800 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-neutral-500 resize-none"
-                            placeholder="Content"
-                          />
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={editForm.published}
-                              onChange={(e) => setEditForm({ ...editForm, published: e.target.checked })}
-                              className="rounded border-neutral-700 bg-neutral-900"
-                            />
-                            <span className="text-xs text-neutral-400">Published</span>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={(e) => handleEditSave(post._id, e)}
-                              className="flex items-center gap-1 bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs transition-colors"
-                            >
-                              <Save size={12} /> Save
-                            </button>
-                            <button
-                              onClick={handleCancelEdit}
-                              className="flex items-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-white px-2 py-1 rounded text-xs transition-colors"
-                            >
-                              <X size={12} /> Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2">
-                          {!post.published && (
-                            <button
-                              onClick={(e) => handleApprove(post._id, e)}
-                              className="flex items-center gap-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 px-3 py-1.5 rounded-lg text-xs transition-colors border border-green-800/50"
-                            >
-                              <CheckCircle size={12} /> Approve
-                            </button>
-                          )}
+                    <div className="col-span-2">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setSelectedPost(post)}
+                          className="flex items-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-3 py-1.5 rounded-lg text-xs transition-colors"
+                        >
+                          <Eye size={12} /> View/Edit
+                        </button>
+                        {!post.published && (
                           <button
-                            onClick={(e) => handleEditClick(post, e)}
-                            className="flex items-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-3 py-1.5 rounded-lg text-xs transition-colors"
+                            onClick={(e) => handleApprove(post._id, e)}
+                            className="flex items-center gap-1 bg-green-600/20 hover:bg-green-600/30 text-green-400 px-3 py-1.5 rounded-lg text-xs transition-colors border border-green-800/50"
                           >
-                            <Edit3 size={12} /> Edit
+                            <CheckCircle size={12} /> Approve
                           </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
                 </motion.div>

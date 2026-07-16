@@ -9,10 +9,18 @@ const apiClient = axios.create({
   },
 });
 
-// Request interceptor for debugging
+// Request interceptor - ENSURE credentials are always sent
 apiClient.interceptors.request.use(
   (config) => {
-    console.log('Request:', config.method.toUpperCase(), config.url);
+    config.withCredentials = true;
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    console.log('Request:', config.method.toUpperCase(), config.url, {
+      withCredentials: config.withCredentials,
+      hasAuth: !!config.headers.Authorization
+    });
     return config;
   },
   (error) => {
@@ -20,7 +28,7 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor for debugging
+// Response interceptor - handle auth errors
 apiClient.interceptors.response.use(
   (response) => {
     return response;
@@ -28,10 +36,17 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       console.error('Unauthorized - Session might be expired');
-      localStorage.removeItem('userRole');
-      localStorage.removeItem('isLoggedIn');
-      localStorage.removeItem('userEmail');
-      window.location.href = '/auth';
+      
+      // Don't clear storage immediately on 401 for all requests
+      // Only redirect to login if it's not a login request itself
+      if (!error.config.url.includes('/auth/login')) {
+        localStorage.removeItem('userRole');
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('userEmail');
+        
+        // Use replace to avoid back-button issues
+        window.location.replace('/auth');
+      }
     }
     return Promise.reject(error);
   }
@@ -66,6 +81,11 @@ export const updatePost = async (postId, updateData) => {
 
 export const fetchAllPosts = async () => {
   const response = await apiClient.get('/posts/all-posts');
+  return response.data;
+};
+
+export const logoutUser = async () => {
+  const response = await apiClient.post('/auth/logout');
   return response.data;
 };
 
