@@ -152,70 +152,74 @@ function ArticleFullView({ post, onBack, onUpdate }) {
       {/* Article Content */}
       <div className="max-w-4xl mx-auto mt-8 px-4 sm:px-6 lg:px-8">
         {isEditing ? (
-          /* Edit Mode */
-          <div className="space-y-6">
-            <input
-              type="text"
-              value={editForm.title}
-              onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
-              className="w-full bg-transparent border-b border-neutral-800 px-0 py-4 text-2xl md:text-4xl text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
-              placeholder="Article Title"
-            />
-            
-            <div className="flex gap-4">
-              <input
-                type="text"
-                value={editForm.author}
-                onChange={(e) => setEditForm({ ...editForm, author: e.target.value })}
-                className="flex-1 bg-transparent border-b border-neutral-800 px-0 py-3 text-lg text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
-                placeholder="Author Name"
-              />
-              <input
-                type="email"
-                value={editForm.authorEmail}
-                onChange={(e) => setEditForm({ ...editForm, authorEmail: e.target.value })}
-                className="flex-1 bg-transparent border-b border-neutral-800 px-0 py-3 text-lg text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
-                placeholder="Author Email"
-              />
-            </div>
+  /* Edit Mode */
+  <div className="space-y-6 w-full max-w-full">
+    <input
+      type="text"
+      value={editForm.title}
+      onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+      className="w-full bg-transparent border-b border-neutral-800 px-0 py-4 text-2xl md:text-4xl text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
+      placeholder="Article Title"
+    />
+    
+    <div className="flex flex-col sm:flex-row gap-4">
+      <input
+        type="text"
+        value={editForm.author}
+        onChange={(e) => setEditForm({ ...editForm, author: e.target.value })}
+        className="flex-1 bg-transparent border-b border-neutral-800 px-0 py-3 text-lg text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors w-full sm:w-auto"
+        placeholder="Author Name"
+      />
+      <input
+        type="email"
+        value={editForm.authorEmail}
+        onChange={(e) => setEditForm({ ...editForm, authorEmail: e.target.value })}
+        className="flex-1 bg-transparent border-b border-neutral-800 px-0 py-3 text-lg text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors w-full sm:w-auto"
+        placeholder="Author Email"
+      />
+    </div>
 
-            <textarea
-              value={editForm.content}
-              onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
-              rows="15"
-              className="w-full bg-neutral-900/50 border border-neutral-800 rounded-xl p-4 text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-500 transition-colors resize-y leading-relaxed text-lg"
-              placeholder="Write your article content here..."
-            />
+    {/* Textarea with explicit width control */}
+    <div className="w-full max-w-full overflow-hidden">
+      <textarea
+        value={editForm.content}
+        onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
+        rows="15"
+        className="w-full bg-neutral-900/50 border border-neutral-800 rounded-xl p-4 text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-500 transition-colors resize-y leading-relaxed text-lg box-border"
+        placeholder="Write your article content here..."
+        style={{ maxWidth: '100%' }}
+      />
+    </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 pt-4">
-              <button
-                onClick={handleSaveDraft}
-                disabled={loading}
-                className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-white font-medium py-3 rounded-xl transition-colors disabled:opacity-50"
-              >
-                <Save size={18} />
-                Save Draft
-              </button>
-              <button
-                onClick={handleSaveAndPublish}
-                disabled={loading}
-                className="flex-1 flex items-center justify-center gap-2 bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold py-3 rounded-xl transition-colors disabled:opacity-50"
-              >
-                <Send size={18} />
-                Save & Publish
-              </button>
-              <button
-                onClick={() => setIsEditing(false)}
-                disabled={loading}
-                className="flex-1 flex items-center justify-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-medium py-3 rounded-xl transition-colors border border-neutral-800 disabled:opacity-50"
-              >
-                <X size={18} />
-                Cancel Edit
-              </button>
-            </div>
-          </div>
-        ) : (
+    {/* Action Buttons */}
+    <div className="flex flex-col sm:flex-row gap-3 pt-4 w-full">
+      <button
+        onClick={handleSaveDraft}
+        disabled={loading}
+        className="flex-1 flex items-center justify-center gap-2 bg-neutral-800 hover:bg-neutral-700 text-white font-medium py-3 rounded-xl transition-colors disabled:opacity-50 w-full sm:w-auto"
+      >
+        <Save size={18} />
+        Save Draft
+      </button>
+      <button
+        onClick={handleSaveAndPublish}
+        disabled={loading}
+        className="flex-1 flex items-center justify-center gap-2 bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold py-3 rounded-xl transition-colors disabled:opacity-50 w-full sm:w-auto"
+      >
+        <Send size={18} />
+        Save & Publish
+      </button>
+      <button
+        onClick={() => setIsEditing(false)}
+        disabled={loading}
+        className="flex-1 flex items-center justify-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-medium py-3 rounded-xl transition-colors border border-neutral-800 disabled:opacity-50 w-full sm:w-auto"
+      >
+        <X size={18} />
+        Cancel Edit
+      </button>
+    </div>
+  </div>
+) : (
           /* View Mode */
           <>
             <div className="text-center mb-8">
@@ -318,17 +322,31 @@ export default function Dashboard() {
       setPosts(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Error fetching all posts:", error);
-      if (error.response?.status === 401) {
+    if (error.response?.status === 401) {
+      // Check if it's really a session issue or just a timing issue
+      const isLoggedIn = localStorage.getItem('isLoggedIn');
+      
+      if (!isLoggedIn) {
         setError("Session expired. Please log in again.");
         localStorage.clear();
         setTimeout(() => navigate('/auth'), 2000);
       } else {
-        setError("Failed to load posts. Please try again.");
+        // Might be a timing issue, retry once
+        setError("Verifying session...");
+        setTimeout(() => {
+          loadAllPosts(); // Retry once
+        }, 1000);
       }
-    } finally {
-      setLoading(false);
+    } else if (error.response?.status === 403) {
+      setError("You don't have permission to access this page.");
+      setTimeout(() => navigate('/'), 2000);
+    } else {
+      setError("Failed to load posts. Please try again.");
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleApprove = async (postId, e) => {
     e.stopPropagation();
