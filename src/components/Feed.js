@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, NotebookPen, Image as ImageIcon, LayoutDashboard } from 'lucide-react';
 import { fetchArticles, postArticle } from '../api/axiosClient';
 import LogoutButton from './LogoutButton';
+import ErrorComponent from './ErrorComponent';
 import { useNavigate } from 'react-router-dom';
 
 export default function Feed() {
@@ -14,6 +15,7 @@ export default function Feed() {
   const [previewImage, setPreviewImage] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [postSuccess, setPostSuccess] = useState(false);
+  const [error, setError] = useState(null);
   const observerTarget = useRef(null);
   const navigate = useNavigate();
   const initialLoadDone = useRef(false);
@@ -51,6 +53,7 @@ export default function Feed() {
   const loadMore = async () => {
     if (loading || !hasMore) return;
     setLoading(true);
+    setError(null); //clear prev errors
     
     try {
       const newArticles = await fetchArticles(page, 20);
@@ -86,6 +89,7 @@ export default function Feed() {
       }
     } catch (error) {
       console.error("Network Error: Could not fetch articles", error.message);
+      setError("Unable to fetch articles. Please try again.");
       setHasMore(false);
     } finally {
       setLoading(false);
@@ -109,6 +113,7 @@ export default function Feed() {
   const handlePostArticle = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
     const payload = {
       title: e.target.title.value,
@@ -145,6 +150,7 @@ export default function Feed() {
       
     } catch (error) {
       console.error("Error posting article:", error);
+      setError("Failed to post article. Please try again.");
       alert("Failed to post article. Please try again.");
     } finally {
       setLoading(false);
@@ -220,6 +226,7 @@ export default function Feed() {
                 onClick={() => {
                   setIsCreating(false);
                   setPreviewImage(null);
+                  setError(null);
                 }}
                 className="flex items-center space-x-2 text-neutral-400 hover:text-white mb-8 transition-colors"
               >
@@ -228,6 +235,13 @@ export default function Feed() {
 
               <h1 className="text-3xl font-bold mb-8">Draft New Article</h1>
 
+              <div className="mb-6">
+                <ErrorComponent 
+                  message={error}
+                  visible={!!error}
+                  onRetry={() => setError(null)}
+                />
+              </div>
               <form onSubmit={handlePostArticle} className="space-y-6">
                 <div>
                   <input 
@@ -346,8 +360,24 @@ export default function Feed() {
             exit={{ opacity: 0 }}
             className="max-w-3xl mx-auto px-4 pt-24 pb-16 flex flex-col items-center"
           >
+            {/* Error in feed */}
+            <div className="w-full mb-8">
+              <ErrorComponent 
+                message={error || 'Unable to fetch articles. Please try again.'}
+                visible={!!error}
+                onRetry={() => {
+                  setError(null);
+                  setArticles([]);
+                  setPage(1);
+                  setHasMore(true);
+                  initialLoadDone.current = false;
+                  loadMore();
+                }}
+              />
+            </div>
+
             <div className="space-y-12 w-full">
-              {articles.length === 0 && !loading ? (
+              {articles.length === 0 && !loading && !error ? (
                 <div className="text-center text-neutral-500 py-12">
                   <p className="text-lg">No articles yet</p>
                   <p className="text-sm mt-2">Be the first to publish!</p>
