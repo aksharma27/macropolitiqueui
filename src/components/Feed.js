@@ -15,28 +15,15 @@ export default function Feed() {
   const [hasMore, setHasMore] = useState(true);
   const [postSuccess, setPostSuccess] = useState(false);
   const observerTarget = useRef(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false); 
   const navigate = useNavigate();
+  const initialLoadDone = useRef(false);
 
-
-  //check login status on mount and when localstorage changes:
-  // Check login status on mount and when localStorage changes
-  useEffect(() => {
-    checkLoginStatus();
-    // Listen for storage changes
-    window.addEventListener('storage', checkLoginStatus);
-    return () => window.removeEventListener('storage', checkLoginStatus);
-  }, []);
-
-  const checkLoginStatus = () => {
-    const loggedIn = localStorage.getItem('isLoggedIn');
-    const userRole = localStorage.getItem('userRole');
-    console.log('Login check:', { loggedIn, userRole }); // Debug log
-    setIsLoggedIn(loggedIn === 'true' && userRole ? true : false);
-  };
   // Initial load
   useEffect(() => {
-    loadMore();
+    if (!initialLoadDone.current) {
+      initialLoadDone.current = true;
+      loadMore();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -52,7 +39,7 @@ export default function Feed() {
       },
       { 
         threshold: 0.1,
-        rootMargin: '100px'
+        rootMargin: '200px' // Increased for earlier loading
       }
     );
 
@@ -67,6 +54,7 @@ export default function Feed() {
     
     try {
       const newArticles = await fetchArticles(page, 20);
+      console.log(`Fetched page ${page}:`, newArticles?.length, 'articles'); // Debug log
 
       const safeArticles = Array.isArray(newArticles) ? newArticles : [];
 
@@ -77,6 +65,8 @@ export default function Feed() {
             item => !existingIds.has(item._id || item.id)
           );
 
+          console.log(`Adding ${uniqueNewArticles.length} new unique articles`); // Debug log
+
           if (uniqueNewArticles.length === 0) {
             setHasMore(false);
             return prev;
@@ -86,6 +76,11 @@ export default function Feed() {
         });
 
         setPage(p => p + 1);
+        
+        // If we got fewer articles than requested, there are no more
+        if (safeArticles.length < 20) {
+          setHasMore(false);
+        }
       } else {
         setHasMore(false);
       }
@@ -133,15 +128,18 @@ export default function Feed() {
       setIsCreating(false);
       setPreviewImage(null);
       
+      // Reset articles and reload from API
       setArticles([]);
       setPage(1);
       setHasMore(true);
+      initialLoadDone.current = false;
       
       const freshArticles = await fetchArticles(1, 20);
       const safeArticles = Array.isArray(freshArticles) ? freshArticles : [];
       setArticles(safeArticles);
       setHasMore(safeArticles.length === 20);
       setPage(2);
+      initialLoadDone.current = true;
       
       setTimeout(() => setPostSuccess(false), 3000);
       
@@ -172,41 +170,40 @@ export default function Feed() {
 
       {/* Fixed Header */}
       {!selectedArticle && !isCreating && (
-  <header className="fixed top-0 left-1 right-1 z-50 bg-black/90 backdrop-blur-sm border-b border-neutral-900">
-    <div className="w-full h-16 flex items-center justify-between px-4 lg:px-[5px]">
-      <h1 className="text-2xl font-bold tracking-tight text-white" style={{ fontFamily: "'Dancing Script', cursive", fontSize: '1.75rem' }}>
-        <a href='/'>MacroPolitique</a>
-      </h1>
+        <header className="fixed top-0 left-1 right-1 z-50 bg-black/90 backdrop-blur-sm border-b border-neutral-900">
+          <div className="w-full h-16 flex items-center justify-between px-4 lg:px-[5px]">
+            <h1 className="text-2xl font-bold tracking-tight text-white" style={{ fontFamily: "'Dancing Script', cursive", fontSize: '1.75rem' }}>
+              <a href='/'>MacroPolitique</a>
+            </h1>
 
-      <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
+              {/* Logout Button - Only show if logged in */}
+              {(localStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('userRole')) && (
+                <LogoutButton />
+              )}
 
-        {/* Logout Button - Only show if logged in */}
-        {(localStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('userRole')) && (
-          <LogoutButton />
-        )}
-
-        {/* Dashboard Button - Only show if logged in */}
-        {localStorage.getItem('isLoggedIn') && localStorage.getItem('userRole') && (
-  <button 
-    onClick={() => navigate('/dashboard')}
-    className="cursor-pointer flex items-center gap-2 bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold px-4 py-2 rounded-full transition-colors text-sm"
-  >
-    <LayoutDashboard size={16} />
-    <span className="hidden sm:inline">Dashboard</span>
-  </button>
-)}
-        
-        <button 
-          onClick={() => setIsCreating(true)}
-          className="cursor-pointer flex items-center gap-2 bg-neutral-600 hover:bg-neutral-800 px-4 py-2 rounded-full transition-colors text-sm text-white"
-        >
-          <NotebookPen size={16} />
-          <span className="hidden sm:inline">Write For Us</span>
-        </button>
-      </div>
-    </div>
-  </header>
-)}
+              {/* Dashboard Button - Only show if logged in */}
+              {localStorage.getItem('isLoggedIn') && localStorage.getItem('userRole') && (
+                <button 
+                  onClick={() => navigate('/dashboard')}
+                  className="cursor-pointer flex items-center gap-2 bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold px-4 py-2 rounded-full transition-colors text-sm"
+                >
+                  <LayoutDashboard size={16} />
+                  <span className="hidden sm:inline">Dashboard</span>
+                </button>
+              )}
+              
+              <button 
+                onClick={() => setIsCreating(true)}
+                className="cursor-pointer flex items-center gap-2 bg-neutral-600 hover:bg-neutral-800 px-4 py-2 rounded-full transition-colors text-sm text-white"
+              >
+                <NotebookPen size={16} />
+                <span className="hidden sm:inline">Write For Us</span>
+              </button>
+            </div>
+          </div>
+        </header>
+      )}
 
       <AnimatePresence mode="wait">
         {isCreating ? (
@@ -301,46 +298,45 @@ export default function Feed() {
         ) : selectedArticle ? (
           /* Full Article View */
           <motion.div 
-  key="article-view"
-  initial={{ opacity: 0, x: 20 }}
-  animate={{ opacity: 1, x: 0 }}
-  exit={{ opacity: 0, x: -20 }}
-  className="fixed inset-0 bg-black overflow-y-auto z-50"
->
-  <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-md border-b border-neutral-900 h-15 flex items-center px-4 lg:px-8">
-    <button 
-      onClick={() => setSelectedArticle(null)}
-      className="flex items-center space-x-2 text-neutral-400 hover:text-white transition-colors py-2"
-    >
-      <ArrowLeft size={15} /> <span>Back</span>
-    </button>
-  </div>
+            key="article-view"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="fixed inset-0 bg-black overflow-y-auto z-50"
+          >
+            <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-md border-b border-neutral-900 h-15 flex items-center px-4 lg:px-8">
+              <button 
+                onClick={() => setSelectedArticle(null)}
+                className="flex items-center space-x-2 text-neutral-400 hover:text-white transition-colors py-2"
+              >
+                <ArrowLeft size={15} /> <span>Back</span>
+              </button>
+            </div>
 
-  {/* Article Content Container - 70% on desktop, wider on mobile */}
-  <div className="max-w-4xl mx-auto mt-8 px-4 sm:px-6 lg:px-8">
-    <div className="text-center mb-8">
-      <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-4 tracking-tight">{selectedArticle.title}</h1>
-      <div className="mb-6 border-b border-neutral-800 pb-4">
-        <p className="text-neutral-300 font-medium">By {selectedArticle.author}</p>
-        <p className="text-neutral-500 text-sm">{formatDate(selectedArticle.date || selectedArticle.publishedOn || selectedArticle.createdAt)}</p>
-      </div>
-    </div>
-    
-    {selectedArticle.imageUrl && (
-      <div className="mb-8">
-        <img 
-          src={selectedArticle.imageUrl} 
-          alt="Article cover" 
-          className="w-full h-56 md:h-80 lg:h-96 rounded-lg object-cover" 
-        />
-      </div>
-    )}
-    
-    <div className="text-left text-neutral-300 leading-8 text-lg pb-18 break-words">
-  {selectedArticle.content}
-</div>
-  </div>
-</motion.div>
+            <div className="max-w-4xl mx-auto mt-8 px-4 sm:px-6 lg:px-8">
+              <div className="text-center mb-8">
+                <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-4 tracking-tight">{selectedArticle.title}</h1>
+                <div className="mb-6 border-b border-neutral-800 pb-4">
+                  <p className="text-neutral-300 font-medium">By {selectedArticle.author}</p>
+                  <p className="text-neutral-500 text-sm">{formatDate(selectedArticle.date || selectedArticle.publishedOn || selectedArticle.createdAt)}</p>
+                </div>
+              </div>
+              
+              {selectedArticle.imageUrl && (
+                <div className="mb-8">
+                  <img 
+                    src={selectedArticle.imageUrl} 
+                    alt="Article cover" 
+                    className="w-full h-56 md:h-80 lg:h-96 rounded-lg object-cover" 
+                  />
+                </div>
+              )}
+              
+              <div className="text-left text-neutral-300 leading-8 text-lg pb-18 break-words">
+                {selectedArticle.content}
+              </div>
+            </div>
+          </motion.div>
         ) : (
           /* Home Feed View */
           <motion.div
@@ -350,7 +346,6 @@ export default function Feed() {
             exit={{ opacity: 0 }}
             className="max-w-3xl mx-auto px-4 pt-24 pb-16 flex flex-col items-center"
           >
-            {/* Articles List */}
             <div className="space-y-12 w-full">
               {articles.length === 0 && !loading ? (
                 <div className="text-center text-neutral-500 py-12">
@@ -368,7 +363,6 @@ export default function Feed() {
                     onClick={() => setSelectedArticle(article)}
                     className="group w-full cursor-pointer border-b border-neutral-900 pb-12 flex flex-col items-center"
                   >
-                    {/* Title and meta - centered */}
                     <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] text-center">
                       <h2 className="text-xl md:text-2xl lg:text-3xl font-semibold mb-[0.125rem] group-hover:text-neutral-300 transition-colors">
                         {article.title}
@@ -382,7 +376,6 @@ export default function Feed() {
                       </div>
                     </div>
                     
-                    {/* Image - centered 50% width */}
                     {article.imageUrl && (
                       <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] h-32 sm:h-48 md:h-64 lg:h-72 overflow-hidden rounded-xl mb-4 bg-neutral-900 relative mx-auto">
                         <img 
@@ -394,7 +387,6 @@ export default function Feed() {
                       </div>
                     )}
                     
-                    {/* Content preview - centered 50% width with center-aligned text */}
                     <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] mx-auto">
                       <p className={`text-neutral-400 text-sm md:text-base text-center ${article.imageUrl ? 'line-clamp-3' : 'line-clamp-5'}`}>
                         {article.content}
