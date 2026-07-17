@@ -215,7 +215,7 @@ function ArticleFullView({ post, onBack, onUpdate }) {
         className="flex-1 flex items-center justify-center gap-2 bg-neutral-900 hover:bg-neutral-800 text-neutral-300 font-medium py-3 rounded-xl transition-colors border border-neutral-800 disabled:opacity-50 w-full sm:w-auto"
       >
         <X size={18} />
-        Cancel Edit
+        Cancel
       </button>
     </div>
   </div>
@@ -270,7 +270,7 @@ function ArticleFullView({ post, onBack, onUpdate }) {
                   className="flex-1 flex items-center justify-center gap-2 bg-green-600/20 hover:bg-green-600/30 text-green-400 font-medium py-3 rounded-xl transition-colors border border-green-800/50 disabled:opacity-50"
                 >
                   <CheckCircle size={18} />
-                  Approve Only
+                  Approve
                 </button>
               )}
               {post.published && (

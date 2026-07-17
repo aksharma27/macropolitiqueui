@@ -175,7 +175,7 @@ export default function Feed() {
   <header className="fixed top-0 left-1 right-1 z-50 bg-black/90 backdrop-blur-sm border-b border-neutral-900">
     <div className="w-full h-16 flex items-center justify-between px-4 lg:px-[5px]">
       <h1 className="text-2xl font-bold tracking-tight text-white" style={{ fontFamily: "'Dancing Script', cursive", fontSize: '1.75rem' }}>
-        MacroPolitique
+        <a href='/'>MacroPolitique</a>
       </h1>
 
       <div className="flex items-center gap-3">
