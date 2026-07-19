@@ -41,7 +41,7 @@ export default function Feed() {
       },
       { 
         threshold: 0.1,
-        rootMargin: '200px' // Increased for earlier loading
+        rootMargin: '200px'
       }
     );
 
@@ -53,11 +53,11 @@ export default function Feed() {
   const loadMore = async () => {
     if (loading || !hasMore) return;
     setLoading(true);
-    setError(null); //clear prev errors
+    setError(null);
     
     try {
       const newArticles = await fetchArticles(page, 20);
-      console.log(`Fetched page ${page}:`, newArticles?.length, 'articles'); // Debug log
+      console.log(`Fetched page ${page}:`, newArticles?.length, 'articles');
 
       const safeArticles = Array.isArray(newArticles) ? newArticles : [];
 
@@ -68,7 +68,7 @@ export default function Feed() {
             item => !existingIds.has(item._id || item.id)
           );
 
-          console.log(`Adding ${uniqueNewArticles.length} new unique articles`); // Debug log
+          console.log(`Adding ${uniqueNewArticles.length} new unique articles`);
 
           if (uniqueNewArticles.length === 0) {
             setHasMore(false);
@@ -80,7 +80,6 @@ export default function Feed() {
 
         setPage(p => p + 1);
         
-        // If we got fewer articles than requested, there are no more
         if (safeArticles.length < 20) {
           setHasMore(false);
         }
@@ -115,15 +114,16 @@ export default function Feed() {
     setLoading(true);
     setError(null);
 
-    const payload = {
-      title: e.target.title.value,
-      author: e.target.author.value,
-      authorEmail: e.target.authorEmail.value,
-      content: e.target.content.value,
-    };
-
-    if (previewImage) {
-      payload.imageUrl = previewImage;
+    const payload = new FormData();
+    payload.append('title', e.target.title.value);
+    payload.append('author', e.target.author.value);
+    payload.append('authorEmail', e.target.authorEmail.value);
+    payload.append('content', e.target.content.value);
+    
+    // Append image if selected
+    const imageInput = e.target.querySelector('input[name="image"]');
+    if (imageInput && imageInput.files[0]) {
+      payload.append('image', imageInput.files[0]);
     }
 
     try {
@@ -133,7 +133,6 @@ export default function Feed() {
       setIsCreating(false);
       setPreviewImage(null);
       
-      // Reset articles and reload from API
       setArticles([]);
       setPage(1);
       setHasMore(true);
@@ -151,10 +150,22 @@ export default function Feed() {
     } catch (error) {
       console.error("Error posting article:", error);
       setError("Failed to post article. Please try again.");
-      alert("Failed to post article. Please try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Helper function to get image URL from article
+  const getImageUrl = (article) => {
+    // Check for new image object structure
+    if (article.image && article.image.url) {
+      return article.image.url;
+    }
+    // Check for old imageUrl string
+    if (article.imageUrl) {
+      return article.imageUrl;
+    }
+    return null;
   };
 
   return (
@@ -183,12 +194,10 @@ export default function Feed() {
             </h1>
 
             <div className="flex items-center gap-3">
-              {/* Logout Button - Only show if logged in */}
               {(localStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('userRole')) && (
                 <LogoutButton />
               )}
 
-              {/* Dashboard Button - Only show if logged in */}
               {localStorage.getItem('isLoggedIn') && localStorage.getItem('userRole') && (
                 <button 
                   onClick={() => navigate('/dashboard')}
@@ -242,6 +251,7 @@ export default function Feed() {
                   onRetry={() => setError(null)}
                 />
               </div>
+
               <form onSubmit={handlePostArticle} className="space-y-6">
                 <div>
                   <input 
@@ -279,7 +289,13 @@ export default function Feed() {
                     <span className="text-neutral-300">
                       {previewImage ? 'Change Cover Image' : 'Upload Cover Image (Optional)'}
                     </span>
-                    <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                    <input 
+                      type="file" 
+                      name="image"
+                      accept="image/*" 
+                      onChange={handleImageChange} 
+                      className="hidden" 
+                    />
                   </label>
                   
                   {previewImage && (
@@ -336,10 +352,11 @@ export default function Feed() {
                 </div>
               </div>
               
-              {selectedArticle.imageUrl && (
+              {/* Full Article Image */}
+              {getImageUrl(selectedArticle) && (
                 <div className="mb-8">
                   <img 
-                    src={selectedArticle.imageUrl} 
+                    src={getImageUrl(selectedArticle)} 
                     alt="Article cover" 
                     className="w-full h-56 md:h-80 lg:h-96 rounded-lg object-cover" 
                   />
@@ -393,6 +410,7 @@ export default function Feed() {
                     onClick={() => setSelectedArticle(article)}
                     className="group w-full cursor-pointer border-b border-neutral-900 pb-12 flex flex-col items-center"
                   >
+                    {/* Title and meta - centered */}
                     <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] text-center">
                       <h2 className="text-xl md:text-2xl lg:text-3xl font-semibold mb-[0.125rem] group-hover:text-neutral-300 transition-colors">
                         {article.title}
@@ -406,19 +424,21 @@ export default function Feed() {
                       </div>
                     </div>
                     
-                    {article.imageUrl && (
+                    {/* Feed Article Image */}
+                    {getImageUrl(article) && (
                       <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] h-32 sm:h-48 md:h-64 lg:h-72 overflow-hidden rounded-xl mb-4 bg-neutral-900 relative mx-auto">
                         <img 
-                          src={article.imageUrl} 
-                          alt="cover" 
+                          src={getImageUrl(article)} 
+                          alt={article.title}
                           className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
                           loading="lazy"
                         />
                       </div>
                     )}
                     
+                    {/* Content preview */}
                     <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] mx-auto">
-                      <p className={`text-neutral-400 text-sm md:text-base text-center ${article.imageUrl ? 'line-clamp-3' : 'line-clamp-5'}`}>
+                      <p className={`text-neutral-400 text-sm md:text-base text-center ${getImageUrl(article) ? 'line-clamp-3' : 'line-clamp-5'}`}>
                         {article.content}
                       </p>
                     </div>

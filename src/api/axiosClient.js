@@ -60,7 +60,11 @@ export const fetchArticles = async (page = 1, limit = 20) => {
 };
 
 export const postArticle = async (articleData) => {
-  const response = await apiClient.post('/posts', articleData);
+  const response = await apiClient.post('/posts', articleData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
   return response.data;
 };
 

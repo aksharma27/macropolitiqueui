@@ -30,17 +30,31 @@ export default function Auth() {
       setLoading(true);
       const userData = await loginUser(payload);
       
-      if (userData && userData.role) {
-        localStorage.setItem('userRole', userData.role);
-        localStorage.setItem('isLoggedIn', 'true');
-        localStorage.setItem('userEmail', userData.email || payload.email);
-      } else {
-        localStorage.setItem('userRole', 'admin');
-        localStorage.setItem('isLoggedIn', 'true');
-        localStorage.setItem('userEmail', payload.email);
-      }
+      if (userData && userData.user) {
+      localStorage.setItem('userRole', userData.user.role);
+      localStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('userEmail', userData.user.email || payload.email);
+    } else if (userData && userData.role) {
+      // Fallback for different response format
+      localStorage.setItem('userRole', userData.role);
+      localStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('userEmail', userData.email || payload.email);
+    } else {
+      // Last resort fallback
+      localStorage.setItem('userRole', 'admin');
+      localStorage.setItem('isLoggedIn', 'true');
+      localStorage.setItem('userEmail', payload.email);
+    }
 
+      console.log('Auth data stored:', {
+      isLoggedIn: localStorage.getItem('isLoggedIn'),
+      userRole: localStorage.getItem('userRole')
+    });
+
+    // Small delay to ensure cookie is set before navigation
+    setTimeout(() => {
       navigate('/');
+    }, 300);
     } catch (error) {
       console.error("Login failure details:", error);
       setErrorMessage(error.response?.data?.error || "Authentication failed. Please verify credentials.");
