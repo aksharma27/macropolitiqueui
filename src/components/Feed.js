@@ -1,10 +1,79 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, NotebookPen, Image as ImageIcon, LayoutDashboard } from 'lucide-react';
-import { fetchArticles, postArticle } from '../api/axiosClient';
+import {
+  ArrowLeft,
+  NotebookPen,
+  LayoutDashboard,
+  Trash2,
+  Mail,
+  CheckCircle,
+  X,
+  Search,
+  ArrowUpDown,
+  Edit3,
+  Eye,
+} from 'lucide-react';
+import {
+  fetchArticles,
+  postArticle,
+  deletePost,
+  sendArticleOtp,
+  verifyArticleOtp,
+  checkEmailVerified,
+  updatePost,
+} from '../api/axiosClient';
 import LogoutButton from './LogoutButton';
 import ErrorComponent from './ErrorComponent';
 import { useNavigate } from 'react-router-dom';
+
+// ✅ Generic Confirmation Modal Component
+function ConfirmModal({
+  isOpen,
+  onCancel,
+  onConfirm,
+  title = 'Are you sure?',
+  message = 'This action cannot be undone.',
+  confirmLabel = 'Confirm',
+  confirmColor = 'red', // 'red', 'yellow', 'green'
+}) {
+  if (!isOpen) return null;
+
+  const colorClasses = {
+    red: 'bg-red-600/30 hover:bg-red-600/50 text-red-400 border-red-800/50',
+    yellow: 'bg-yellow-600/30 hover:bg-yellow-600/50 text-yellow-400 border-yellow-800/50',
+    green: 'bg-green-600/30 hover:bg-green-600/50 text-green-400 border-green-800/50',
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.9 }}
+        className="bg-neutral-900 border border-neutral-700 rounded-xl p-6 max-w-sm w-full mx-4"
+      >
+        <h3 className="text-white text-center text-lg font-bold mb-2">{title}</h3>
+        <p className="text-neutral-300 text-center text-sm mb-6">{message}</p>
+        <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={onCancel}
+            className="p-3 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 rounded-full transition-colors"
+            aria-label="Cancel"
+          >
+            <X size={20} />
+          </button>
+          <button
+            onClick={onConfirm}
+            className={`p-3 rounded-full transition-colors border ${colorClasses[confirmColor]}`}
+            aria-label={confirmLabel}
+          >
+            <CheckCircle size={20} />
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 export default function Feed() {
   const [articles, setArticles] = useState([]);
@@ -12,169 +81,438 @@ export default function Feed() {
   const [selectedArticle, setSelectedArticle] = useState(null);
   const [isCreating, setIsCreating] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [previewImage, setPreviewImage] = useState(null);
   const [hasMore, setHasMore] = useState(true);
   const [postSuccess, setPostSuccess] = useState(false);
   const [error, setError] = useState(null);
   const observerTarget = useRef(null);
   const navigate = useNavigate();
-  const initialLoadDone = useRef(false);
+  const isAdmin = localStorage.getItem('userRole') === 'admin';
 
-  // Initial load
+  // Refs to control initial load and observer
+  const initialLoadDone = useRef(false);
+  const initialLoadInProgress = useRef(false);
+  const observerSetupDone = useRef(false);
+
+  // Search & sort states
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Admin edit state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    title: '',
+    content: '',
+    author: '',
+    authorEmail: '',
+  });
+  const [editLoading, setEditLoading] = useState(false);
+
+  // ✅ Generic confirm modal state
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null); // function to call on confirm
+  const [confirmTitle, setConfirmTitle] = useState('Are you sure?');
+  const [confirmMessage, setConfirmMessage] = useState('This action cannot be undone.');
+  const [confirmLabel, setConfirmLabel] = useState('Confirm');
+  const [confirmColor, setConfirmColor] = useState('red');
+
+  // Debounce search input
   useEffect(() => {
-    if (!initialLoadDone.current) {
-      initialLoadDone.current = true;
-      loadMore();
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // Reset feed when search or sort changes – skip first run
+  const isFirstSearchSortRun = useRef(true);
+  useEffect(() => {
+    if (isFirstSearchSortRun.current) {
+      isFirstSearchSortRun.current = false;
+      return;
+    }
+    if (initialLoadDone.current) {
+      setArticles([]);
+      setPage(1);
+      setHasMore(true);
+      observerSetupDone.current = false;
+      initialLoadDone.current = false;
+      loadMore(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, sortOrder]);
+
+  // Article form states (for creation)
+  const [formTitle, setFormTitle] = useState('');
+  const [formAuthor, setFormAuthor] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formContent, setFormContent] = useState('');
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [showOtpInput, setShowOtpInput] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [contentError, setContentError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+
+  // loadMore – wrapped in useCallback
+  const loadMore = useCallback(
+    async (reset = false) => {
+      if (loading || (!hasMore && !reset)) return;
+
+      setLoading(true);
+      setError(null);
+      if (reset) initialLoadInProgress.current = true;
+
+      try {
+        const currentPage = reset ? 1 : page;
+        const newArticles = await fetchArticles({
+          page: currentPage,
+          limit: 20,
+          search: debouncedSearch,
+          sort: sortOrder,
+        });
+
+        const safeArticles = Array.isArray(newArticles) ? newArticles : [];
+
+        if (safeArticles.length > 0) {
+          if (reset) {
+            setArticles(safeArticles);
+            setPage(2);
+            setHasMore(safeArticles.length === 20);
+          } else {
+            setArticles((prev) => {
+              const existingIds = new Map(prev.map((item) => [item._id || item.id, true]));
+              const uniqueNewArticles = safeArticles.filter(
+                (item) => !existingIds.has(item._id || item.id)
+              );
+              if (uniqueNewArticles.length === 0) {
+                setHasMore(false);
+                return prev;
+              }
+              return [...prev, ...uniqueNewArticles];
+            });
+            setPage((p) => p + 1);
+            if (safeArticles.length < 20) setHasMore(false);
+          }
+        } else {
+          if (reset) {
+            setArticles([]);
+            setHasMore(false);
+          } else {
+            setHasMore(false);
+          }
+        }
+      } catch (error) {
+        console.error('Network Error:', error.message);
+        setError('Unable to fetch articles. Please try again.');
+        setHasMore(false);
+      } finally {
+        setLoading(false);
+        initialLoadInProgress.current = false;
+        if (reset) {
+          initialLoadDone.current = true;
+          observerSetupDone.current = false;
+        }
+      }
+    },
+    [loading, hasMore, page, debouncedSearch, sortOrder]
+  );
+
+  // Initial load – runs once
+  useEffect(() => {
+    if (!initialLoadDone.current && !initialLoadInProgress.current) {
+      loadMore(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Infinite scroll listener setup
+  // Infinite scroll observer
   useEffect(() => {
-    if (!observerTarget.current || selectedArticle || isCreating || !hasMore) return;
+    if (
+      initialLoadInProgress.current ||
+      !initialLoadDone.current ||
+      !observerTarget.current ||
+      selectedArticle ||
+      isCreating ||
+      !hasMore ||
+      loading ||
+      observerSetupDone.current
+    ) {
+      return;
+    }
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading) {
-          loadMore();
+        if (entries[0].isIntersecting && hasMore && !loading && !initialLoadInProgress.current) {
+          loadMore(false);
         }
       },
-      { 
-        threshold: 0.1,
-        rootMargin: '200px'
-      }
+      { threshold: 0.1, rootMargin: '200px' }
     );
 
     observer.observe(observerTarget.current);
+    observerSetupDone.current = true;
 
-    return () => observer.disconnect();
-  }, [articles.length, loading, hasMore, selectedArticle, isCreating]);
-
-  const loadMore = async () => {
-    if (loading || !hasMore) return;
-    setLoading(true);
-    setError(null);
-    
-    try {
-      const newArticles = await fetchArticles(page, 20);
-      console.log(`Fetched page ${page}:`, newArticles?.length, 'articles');
-
-      const safeArticles = Array.isArray(newArticles) ? newArticles : [];
-
-      if (safeArticles.length > 0) {
-        setArticles(prev => {
-          const existingIds = new Map(prev.map(item => [item._id || item.id, true]));
-          const uniqueNewArticles = safeArticles.filter(
-            item => !existingIds.has(item._id || item.id)
-          );
-
-          console.log(`Adding ${uniqueNewArticles.length} new unique articles`);
-
-          if (uniqueNewArticles.length === 0) {
-            setHasMore(false);
-            return prev;
-          }
-
-          return [...prev, ...uniqueNewArticles];
-        });
-
-        setPage(p => p + 1);
-        
-        if (safeArticles.length < 20) {
-          setHasMore(false);
-        }
-      } else {
-        setHasMore(false);
-      }
-    } catch (error) {
-      console.error("Network Error: Could not fetch articles", error.message);
-      setError("Unable to fetch articles. Please try again.");
-      setHasMore(false);
-    } finally {
-      setLoading(false);
-    }
-  };
+    return () => {
+      observer.disconnect();
+      observerSetupDone.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [articles.length, loading, hasMore, selectedArticle, isCreating, loadMore]);
 
   const formatDate = (isoString) => {
     if (!isoString) return '';
     return new Date(isoString).toLocaleString('en-US', {
-      month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit'
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
     });
   };
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setPreviewImage(URL.createObjectURL(file));
+  // ----- Admin actions -----
+
+  // Unpublish: set published: false
+  const handleUnpublish = async (articleId) => {
+    try {
+      setLoading(true);
+      await updatePost(articleId, { published: false });
+      // Update local state
+      setArticles((prev) =>
+        prev.map((article) =>
+          article._id === articleId ? { ...article, published: false } : article
+        )
+      );
+      if (selectedArticle && selectedArticle._id === articleId) {
+        setSelectedArticle((prev) => ({ ...prev, published: false }));
+      }
+    } catch (error) {
+      console.error('Error unpublishing:', error);
+      alert('Failed to unpublish article.');
+    } finally {
+      setLoading(false);
+      setConfirmModalOpen(false);
     }
+  };
+
+  // Delete action
+  const handleDelete = async (articleId) => {
+    try {
+      setLoading(true);
+      await deletePost(articleId);
+      setArticles((prev) => prev.filter((article) => article._id !== articleId));
+      if (selectedArticle && selectedArticle._id === articleId) {
+        setSelectedArticle(null);
+        setIsEditing(false);
+      }
+    } catch (error) {
+      console.error('Error deleting article:', error);
+      alert('Failed to delete article. Please try again.');
+    } finally {
+      setLoading(false);
+      setConfirmModalOpen(false);
+    }
+  };
+
+  // Open confirm modal for delete
+  const requestDelete = (articleId) => {
+    setConfirmTitle('Delete Article?');
+    setConfirmMessage('Are you sure you want to delete this article? This action cannot be undone.');
+    setConfirmLabel('Delete');
+    setConfirmColor('red');
+    setConfirmAction(() => () => handleDelete(articleId));
+    setConfirmModalOpen(true);
+  };
+
+  // Open confirm modal for unpublish
+  const requestUnpublish = (articleId) => {
+    setConfirmTitle('Unpublish Article?');
+    setConfirmMessage('This article will no longer be visible to readers. You can publish it again later.');
+    setConfirmLabel('Unpublish');
+    setConfirmColor('yellow');
+    setConfirmAction(() => () => handleUnpublish(articleId));
+    setConfirmModalOpen(true);
+  };
+
+  // Edit: open edit mode for the selected article
+  const handleEditClick = (article) => {
+    setSelectedArticle(article);
+    setEditForm({
+      title: article.title,
+      content: article.content,
+      author: article.author,
+      authorEmail: article.authorEmail,
+    });
+    setIsEditing(true);
+  };
+
+  // Save edited article
+  const handleSaveEdit = async () => {
+    try {
+      setEditLoading(true);
+      const updatedPost = await updatePost(selectedArticle._id, {
+        title: editForm.title,
+        content: editForm.content,
+        author: editForm.author,
+        authorEmail: editForm.authorEmail,
+        published: selectedArticle.published,
+      });
+      setArticles((prev) =>
+        prev.map((article) =>
+          article._id === updatedPost.post._id ? updatedPost.post : article
+        )
+      );
+      setSelectedArticle(updatedPost.post);
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error updating article:', error);
+      alert('Failed to update article.');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setSelectedArticle((prev) => prev);
+  };
+
+  // ----- Creation OTP handlers (unchanged) -----
+  const handleSendOtp = async () => {
+    if (!formEmail) {
+      setOtpError('Please enter your email first.');
+      return;
+    }
+    try {
+      setOtpError('');
+      await sendArticleOtp(formEmail);
+      setOtpSent(true);
+      setShowOtpInput(true);
+      setOtpError('OTP sent to your email.');
+    } catch (error) {
+      console.error('Send OTP error:', error);
+      setOtpError('Failed to send OTP. Please try again.');
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode || otpCode.length !== 6) {
+      setOtpError('Please enter a valid 6-digit OTP.');
+      return;
+    }
+    try {
+      setOtpError('');
+      await verifyArticleOtp({ email: formEmail, otp: otpCode });
+      setEmailVerified(true);
+      setShowOtpInput(false);
+      setOtpSent(false);
+      setOtpError('Email verified successfully!');
+    } catch (error) {
+      console.error('Verify OTP error:', error);
+      setOtpError('Invalid OTP. Please try again.');
+    }
+  };
+
+  const handleContentChange = (text) => {
+    setFormContent(text);
+    if (text.length < 100) {
+      setContentError(`Content must be at least 100 characters (${text.length}/100)`);
+    } else {
+      setContentError('');
+    }
+  };
+
+  const checkEmail = async (email) => {
+    if (!email) return;
+    setCheckingEmail(true);
+    try {
+      const result = await checkEmailVerified(email);
+      if (result.verified) {
+        setEmailVerified(true);
+        setOtpError('Email already verified. You can publish.');
+        setShowOtpInput(false);
+        setOtpSent(false);
+      } else {
+        setEmailVerified(false);
+      }
+    } catch (error) {
+      console.error('Check email error:', error);
+    } finally {
+      setCheckingEmail(false);
+    }
+  };
+
+  const handleEmailChange = (e) => {
+    const newEmail = e.target.value;
+    setFormEmail(newEmail);
+    setEmailVerified(false);
+    setOtpSent(false);
+    setShowOtpInput(false);
+    setOtpCode('');
+    setOtpError('');
   };
 
   const handlePostArticle = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    if (!emailVerified) {
+      alert('Please verify your email first.');
+      return;
+    }
+    if (formContent.length < 100) {
+      setContentError('Content must be at least 100 characters.');
+      return;
+    }
+    setIsSubmitting(true);
     setError(null);
 
-    const payload = new FormData();
-    payload.append('title', e.target.title.value);
-    payload.append('author', e.target.author.value);
-    payload.append('authorEmail', e.target.authorEmail.value);
-    payload.append('content', e.target.content.value);
-    
-    // Append image if selected
-    const imageInput = e.target.querySelector('input[name="image"]');
-    if (imageInput && imageInput.files[0]) {
-      payload.append('image', imageInput.files[0]);
-    }
+    const formData = new FormData();
+    formData.append('title', formTitle);
+    formData.append('author', formAuthor);
+    formData.append('authorEmail', formEmail);
+    formData.append('content', formContent);
 
     try {
-      await postArticle(payload);
-      
+      await postArticle(formData);
       setPostSuccess(true);
       setIsCreating(false);
-      setPreviewImage(null);
-      
+      setFormTitle('');
+      setFormAuthor('');
+      setFormEmail('');
+      setFormContent('');
+      setEmailVerified(false);
+      setOtpSent(false);
+      setOtpCode('');
+      setShowOtpInput(false);
+      setOtpError('');
+      setContentError('');
       setArticles([]);
       setPage(1);
       setHasMore(true);
       initialLoadDone.current = false;
-      
-      const freshArticles = await fetchArticles(1, 20);
-      const safeArticles = Array.isArray(freshArticles) ? freshArticles : [];
-      setArticles(safeArticles);
-      setHasMore(safeArticles.length === 20);
-      setPage(2);
-      initialLoadDone.current = true;
-      
+      observerSetupDone.current = false;
+      await loadMore(true);
       setTimeout(() => setPostSuccess(false), 3000);
-      
     } catch (error) {
-      console.error("Error posting article:", error);
-      setError("Failed to post article. Please try again.");
+      console.error('Error posting article:', error);
+      setError('Failed to post article. Please try again.');
+      alert('Failed to post article. Please try again.');
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  // Helper function to get image URL from article
-  const getImageUrl = (article) => {
-    // Check for new image object structure
-    if (article.image && article.image.url) {
-      return article.image.url;
-    }
-    // Check for old imageUrl string
-    if (article.imageUrl) {
-      return article.imageUrl;
-    }
-    return null;
+  const toggleSort = () => {
+    setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
   };
 
+  // ----- JSX -----
   return (
     <div className="min-h-screen bg-black text-white selection:bg-neutral-800 overflow-x-hidden">
-      
-      {/* Success Notification */}
       <AnimatePresence>
         {postSuccess && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
@@ -185,21 +523,49 @@ export default function Feed() {
         )}
       </AnimatePresence>
 
-      {/* Fixed Header */}
       {!selectedArticle && !isCreating && (
         <header className="fixed top-0 left-1 right-1 z-50 bg-black/90 backdrop-blur-sm border-b border-neutral-900">
           <div className="w-full h-16 flex items-center justify-between px-4 lg:px-[5px]">
-            <h1 className="text-2xl font-bold tracking-tight text-white" style={{ fontFamily: "'Dancing Script', cursive", fontSize: '1.75rem' }}>
-              <a href='/'>MacroPolitique</a>
+            <h1 className="text-2xl tracking-tight text-white">
+              <a href="/">
+                <span
+                  style={{
+                    fontFamily: "'Dancing Script', cursive",
+                    fontSize: '1.75rem',
+                    fontWeight: 900,
+                    WebkitTextStroke: '0.2px currentColor',
+                  }}
+                >
+                  MacroPolitique
+                </span>
+              </a>
             </h1>
-
             <div className="flex items-center gap-3">
-              {(localStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('userRole')) && (
-                <LogoutButton />
-              )}
+              <div className="relative hidden sm:block">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search articles..."
+                  className="bg-neutral-800/50 border border-neutral-700 rounded-full px-4 py-1.5 pl-9 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-neutral-400 transition-colors w-40 md:w-56"
+                />
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+              </div>
 
-              {localStorage.getItem('isLoggedIn') && localStorage.getItem('userRole') && (
-                <button 
+              <button
+                onClick={toggleSort}
+                className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 rounded-full transition-colors text-xs text-neutral-300"
+                aria-label="Toggle sort order"
+              >
+                <ArrowUpDown size={14} />
+                <span className="hidden xs:inline">
+                  {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
+                </span>
+              </button>
+
+              {(localStorage.getItem('isLoggedIn') === 'true' || isAdmin) && <LogoutButton />}
+              {localStorage.getItem('isLoggedIn') && isAdmin && (
+                <button
                   onClick={() => navigate('/dashboard')}
                   className="cursor-pointer flex items-center gap-2 bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold px-4 py-2 rounded-full transition-colors text-sm"
                 >
@@ -207,8 +573,7 @@ export default function Feed() {
                   <span className="hidden sm:inline">Dashboard</span>
                 </button>
               )}
-              
-              <button 
+              <button
                 onClick={() => setIsCreating(true)}
                 className="cursor-pointer flex items-center gap-2 bg-neutral-600 hover:bg-neutral-800 px-4 py-2 rounded-full transition-colors text-sm text-white"
               >
@@ -217,13 +582,26 @@ export default function Feed() {
               </button>
             </div>
           </div>
+
+          <div className="sm:hidden px-4 py-2 border-t border-neutral-800">
+            <div className="relative">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search articles..."
+                className="w-full bg-neutral-800/50 border border-neutral-700 rounded-full px-4 py-2 pl-9 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-neutral-400 transition-colors"
+              />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+            </div>
+          </div>
         </header>
       )}
 
       <AnimatePresence mode="wait">
         {isCreating ? (
-          /* Create Article View */
-          <motion.div 
+          // Create Article View (unchanged)
+          <motion.div
             key="create-view"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -231,11 +609,20 @@ export default function Feed() {
             className="fixed inset-0 bg-black overflow-y-auto z-50 pt-8 px-4 pb-12"
           >
             <div className="max-w-2xl mx-auto">
-              <button 
+              <button
                 onClick={() => {
                   setIsCreating(false);
-                  setPreviewImage(null);
                   setError(null);
+                  setFormTitle('');
+                  setFormAuthor('');
+                  setFormEmail('');
+                  setFormContent('');
+                  setEmailVerified(false);
+                  setOtpSent(false);
+                  setOtpCode('');
+                  setShowOtpInput(false);
+                  setOtpError('');
+                  setContentError('');
                 }}
                 className="flex items-center space-x-2 text-neutral-400 hover:text-white mb-8 transition-colors"
               >
@@ -245,141 +632,289 @@ export default function Feed() {
               <h1 className="text-3xl font-bold mb-8">Draft New Article</h1>
 
               <div className="mb-6">
-                <ErrorComponent 
-                  message={error}
-                  visible={!!error}
-                  onRetry={() => setError(null)}
-                />
+                <ErrorComponent message={error} visible={!!error} onRetry={() => setError(null)} />
               </div>
 
               <form onSubmit={handlePostArticle} className="space-y-6">
                 <div>
-                  <input 
-                    type="text" 
-                    name="title"
-                    placeholder="Article Heading" 
+                  <input
+                    type="text"
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                    placeholder="Article Heading"
                     required
                     className="w-full bg-transparent border-b border-neutral-800 px-0 py-4 text-2xl md:text-4xl text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
                   />
                 </div>
 
                 <div>
-                  <input 
-                    type="text" 
-                    name="author"
-                    placeholder="Author Name" 
+                  <input
+                    type="text"
+                    value={formAuthor}
+                    onChange={(e) => setFormAuthor(e.target.value)}
+                    placeholder="Author Name"
                     required
                     className="w-full bg-transparent border-b border-neutral-800 px-0 py-3 text-lg text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
                   />
                 </div>
 
                 <div>
-                  <input 
-                    type="email" 
-                    name="authorEmail"
-                    placeholder="Author Email" 
-                    required
-                    className="w-full bg-transparent border-b border-neutral-800 px-0 py-3 text-lg text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
-                  />
-                </div>
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+                    <div className="flex-1">
+                      <input
+                        type="email"
+                        value={formEmail}
+                        onChange={handleEmailChange}
+                        onBlur={() => checkEmail(formEmail)}
+                        placeholder="Author Email"
+                        required
+                        disabled={emailVerified}
+                        className={`w-full bg-transparent border-b px-0 py-3 text-lg text-white placeholder:text-neutral-600 focus:outline-none transition-colors ${
+                          emailVerified
+                            ? 'border-green-500 text-green-400'
+                            : 'border-neutral-800 focus:border-neutral-400'
+                        }`}
+                      />
+                    </div>
+                    {!emailVerified ? (
+                      <button
+                        type="button"
+                        onClick={handleSendOtp}
+                        disabled={!formEmail || checkingEmail}
+                        className="flex items-center gap-2 bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors text-sm whitespace-nowrap"
+                      >
+                        <Mail size={16} />
+                        {checkingEmail ? 'Checking...' : 'Send OTP'}
+                      </button>
+                    ) : (
+                      <span className="flex items-center gap-2 text-green-400 text-sm">
+                        <CheckCircle size={16} />
+                        Verified
+                      </span>
+                    )}
+                  </div>
 
-                <div className="pt-4">
-                  <label className="cursor-pointer flex items-center justify-center w-full md:w-auto md:inline-flex space-x-2 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 px-6 py-4 rounded-xl transition-all">
-                    <ImageIcon size={20} className="text-neutral-400" />
-                    <span className="text-neutral-300">
-                      {previewImage ? 'Change Cover Image' : 'Upload Cover Image (Optional)'}
-                    </span>
-                    <input 
-                      type="file" 
-                      name="image"
-                      accept="image/*" 
-                      onChange={handleImageChange} 
-                      className="hidden" 
-                    />
-                  </label>
-                  
-                  {previewImage && (
-                    <div className="mt-6 w-full h-48 md:h-64 rounded-xl overflow-hidden bg-neutral-900">
-                      <img src={previewImage} alt="Preview" className="w-full h-full object-cover" />
+                  {otpError && (
+                    <p
+                      className={`mt-1 text-sm ${
+                        otpError.includes('verified') ? 'text-green-400' : 'text-red-400'
+                      }`}
+                    >
+                      {otpError}
+                    </p>
+                  )}
+
+                  {showOtpInput && !emailVerified && (
+                    <div className="mt-3 flex flex-col sm:flex-row gap-2 sm:items-end">
+                      <input
+                        type="text"
+                        value={otpCode}
+                        onChange={(e) =>
+                          setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                        }
+                        placeholder="Enter 6-digit OTP"
+                        className="flex-1 bg-transparent border-b border-neutral-800 px-0 py-2 text-lg text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleVerifyOtp}
+                        className="bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold px-4 py-2 rounded-lg transition-colors text-sm"
+                      >
+                        Verify
+                      </button>
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <textarea 
-                    name="content"
-                    placeholder="Write your article content here..." 
+                  <textarea
+                    value={formContent}
+                    onChange={(e) => handleContentChange(e.target.value)}
+                    placeholder="Write your article content here (minimum 100 characters)..."
                     required
                     rows="8"
                     className="w-full bg-neutral-900/50 border border-neutral-800 rounded-xl p-4 text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-500 transition-colors resize-y leading-relaxed"
-                  ></textarea>
+                  />
+                  {contentError && <p className="mt-1 text-sm text-red-400">{contentError}</p>}
                 </div>
 
-                <button 
+                <button
                   type="submit"
-                  disabled={loading}
-                  className="w-full bg-white text-black font-semibold py-4 rounded-xl hover:bg-neutral-200 transition-colors mt-8 disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={isSubmitting || !emailVerified || formContent.length < 100}
+                  className={`w-full font-semibold py-4 rounded-xl transition-colors mt-8 ${
+                    isSubmitting || !emailVerified || formContent.length < 100
+                      ? 'bg-neutral-700 text-neutral-400 cursor-not-allowed'
+                      : 'bg-white text-black hover:bg-neutral-200'
+                  }`}
                 >
-                  {loading ? 'Publishing...' : 'Publish Article'}
+                  {isSubmitting ? 'Publishing...' : 'Publish Article'}
                 </button>
+
+                {!emailVerified && (
+                  <p className="text-xs text-neutral-500 text-center">
+                    Please verify your email before publishing.
+                  </p>
+                )}
+                {emailVerified && formContent.length < 100 && (
+                  <p className="text-xs text-red-400 text-center">
+                    Content must be at least 100 characters.
+                  </p>
+                )}
               </form>
             </div>
           </motion.div>
         ) : selectedArticle ? (
-          /* Full Article View */
-          <motion.div 
+          // Full Article View
+          <motion.div
             key="article-view"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             className="fixed inset-0 bg-black overflow-y-auto z-50"
           >
-            <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-md border-b border-neutral-900 h-15 flex items-center px-4 lg:px-8">
-              <button 
-                onClick={() => setSelectedArticle(null)}
+            <div className="sticky top-0 z-50 bg-black/95 backdrop-blur-md border-b border-neutral-900 h-15 flex items-center justify-between px-4 lg:px-8">
+              <button
+                onClick={() => {
+                  setSelectedArticle(null);
+                  setIsEditing(false);
+                }}
                 className="flex items-center space-x-2 text-neutral-400 hover:text-white transition-colors py-2"
               >
                 <ArrowLeft size={15} /> <span>Back</span>
               </button>
+              <div className="flex items-center gap-2">
+                {isAdmin && (
+                  <>
+                    {!isEditing && (
+                      <>
+                        <button
+                          onClick={() => handleEditClick(selectedArticle)}
+                          className="p-2 text-blue-400 hover:text-blue-300 transition-colors"
+                          aria-label="Edit"
+                        >
+                          <Edit3 size={18} />
+                        </button>
+                        {selectedArticle.published && (
+                          <button
+                            onClick={() => requestUnpublish(selectedArticle._id)}
+                            className="p-2 text-yellow-400 hover:text-yellow-300 transition-colors"
+                            aria-label="Unpublish"
+                          >
+                            <Eye size={18} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => requestDelete(selectedArticle._id)}
+                          className="p-2 text-red-400 hover:text-red-300 transition-colors"
+                          aria-label="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="max-w-4xl mx-auto mt-8 px-4 sm:px-6 lg:px-8">
-              <div className="text-center mb-8">
-                <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-4 tracking-tight">{selectedArticle.title}</h1>
-                <div className="mb-6 border-b border-neutral-800 pb-4">
-                  <p className="text-neutral-300 font-medium">By {selectedArticle.author}</p>
-                  <p className="text-neutral-500 text-sm">{formatDate(selectedArticle.date || selectedArticle.publishedOn || selectedArticle.createdAt)}</p>
-                </div>
-              </div>
-              
-              {/* Full Article Image */}
-              {getImageUrl(selectedArticle) && (
-                <div className="mb-8">
-                  <img 
-                    src={getImageUrl(selectedArticle)} 
-                    alt="Article cover" 
-                    className="w-full h-56 md:h-80 lg:h-96 rounded-lg object-cover" 
+              {isEditing ? (
+                // Edit mode
+                <div className="space-y-6">
+                  <input
+                    type="text"
+                    value={editForm.title}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                    className="w-full bg-transparent border-b border-neutral-800 px-0 py-4 text-2xl md:text-4xl text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
+                    placeholder="Title"
                   />
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <input
+                      type="text"
+                      value={editForm.author}
+                      onChange={(e) => setEditForm({ ...editForm, author: e.target.value })}
+                      className="flex-1 bg-transparent border-b border-neutral-800 px-0 py-3 text-lg text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
+                      placeholder="Author"
+                    />
+                    <input
+                      type="email"
+                      value={editForm.authorEmail}
+                      onChange={(e) => setEditForm({ ...editForm, authorEmail: e.target.value })}
+                      className="flex-1 bg-transparent border-b border-neutral-800 px-0 py-3 text-lg text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-400 transition-colors"
+                      placeholder="Author Email"
+                    />
+                  </div>
+                  <textarea
+                    value={editForm.content}
+                    onChange={(e) => setEditForm({ ...editForm, content: e.target.value })}
+                    rows="15"
+                    className="w-full bg-neutral-900/50 border border-neutral-800 rounded-xl p-4 text-white placeholder:text-neutral-600 focus:outline-none focus:border-neutral-500 transition-colors resize-y leading-relaxed text-lg"
+                    placeholder="Content"
+                  />
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleSaveEdit}
+                      disabled={editLoading}
+                      className="flex-1 bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold py-3 rounded-xl transition-colors disabled:opacity-50"
+                    >
+                      {editLoading ? 'Saving...' : 'Save Changes'}
+                    </button>
+                    <button
+                      onClick={cancelEdit}
+                      className="flex-1 bg-neutral-800 hover:bg-neutral-700 text-white font-medium py-3 rounded-xl transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
+              ) : (
+                // View mode
+                <>
+                  <div className="text-center mb-8">
+                    <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-4 tracking-tight">
+                      {selectedArticle.title}
+                    </h1>
+                    <div className="mb-6 border-b border-neutral-800 pb-4">
+                      <p className="text-neutral-300 font-medium">By {selectedArticle.author}</p>
+                      <p className="text-neutral-500 text-sm">
+                        {formatDate(
+                          selectedArticle.date || selectedArticle.publishedOn || selectedArticle.createdAt
+                        )}
+                      </p>
+                      {isAdmin && (
+                        <p className="text-xs text-neutral-500 mt-1">
+                          Status: {selectedArticle.published ? 'Published' : 'Unpublished'}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {selectedArticle.imageUrl && (
+                    <div className="mb-8">
+                      <img
+                        src={selectedArticle.imageUrl}
+                        alt="Article cover"
+                        className="w-full h-56 md:h-80 lg:h-96 rounded-lg object-cover"
+                      />
+                    </div>
+                  )}
+                  <div className="text-left text-neutral-300 leading-8 text-lg pb-18 break-words">
+                    {selectedArticle.content}
+                  </div>
+                </>
               )}
-              
-              <div className="text-left text-neutral-300 leading-8 text-lg pb-18 break-words">
-                {selectedArticle.content}
-              </div>
             </div>
           </motion.div>
         ) : (
-          /* Home Feed View */
+          // Feed View
           <motion.div
             key="feed-view"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="max-w-3xl mx-auto px-4 pt-24 pb-16 flex flex-col items-center"
+            className="max-w-3xl mx-auto px-4 pt-28 pb-16 flex flex-col items-center"
           >
-            {/* Error in feed */}
             <div className="w-full mb-8">
-              <ErrorComponent 
+              <ErrorComponent
                 message={error || 'Unable to fetch articles. Please try again.'}
                 visible={!!error}
                 onRetry={() => {
@@ -388,66 +923,115 @@ export default function Feed() {
                   setPage(1);
                   setHasMore(true);
                   initialLoadDone.current = false;
-                  loadMore();
+                  observerSetupDone.current = false;
+                  loadMore(true);
                 }}
               />
             </div>
-
             <div className="space-y-12 w-full">
               {articles.length === 0 && !loading && !error ? (
                 <div className="text-center text-neutral-500 py-12">
-                  <p className="text-lg">No articles yet</p>
-                  <p className="text-sm mt-2">Be the first to publish!</p>
+                  <p className="text-lg">No articles found</p>
+                  <p className="text-sm mt-2">Try adjusting your search or publish the first article!</p>
                 </div>
               ) : (
                 articles.map((article, index) => (
-                  <motion.article 
+                  <motion.article
                     key={article._id || article.id || index}
                     initial={{ opacity: 0, y: 20 }}
                     whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: "-50px" }}
+                    viewport={{ once: true, margin: '-50px' }}
                     transition={{ duration: 0.4, delay: (index % 5) * 0.1 }}
-                    onClick={() => setSelectedArticle(article)}
                     className="group w-full cursor-pointer border-b border-neutral-900 pb-12 flex flex-col items-center"
                   >
-                    {/* Title and meta - centered */}
-                    <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] text-center">
-                      <h2 className="text-xl md:text-2xl lg:text-3xl font-semibold mb-[0.125rem] group-hover:text-neutral-300 transition-colors">
-                        {article.title}
-                      </h2>
-                      
-                      <div className="mb-4 flex items-center justify-center space-x-2">
-                        <span className="text-sm font-medium text-neutral-400">{article.author}</span>
-                        <span className="text-xs text-neutral-600">
-                          {formatDate(article.publishedOn || article.createdAt)}
-                        </span>
+                    <div
+                      onClick={() => setSelectedArticle(article)}
+                      className="w-full flex flex-col items-center"
+                    >
+                      <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] text-center">
+                        <h2 className="text-xl md:text-2xl lg:text-3xl font-semibold mb-[0.125rem] group-hover:text-neutral-300 transition-colors">
+                          {article.title}
+                        </h2>
+                        <div className="mb-4 flex items-center justify-center space-x-2">
+                          <span className="text-sm font-medium text-neutral-400">
+                            {article.author}
+                          </span>
+                          <span className="text-xs text-neutral-600">
+                            {formatDate(article.publishedOn || article.createdAt)}
+                          </span>
+                          {isAdmin && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              article.published
+                                ? 'bg-green-900/30 text-green-400'
+                                : 'bg-yellow-900/30 text-yellow-400'
+                            }`}>
+                              {article.published ? 'Published' : 'Draft'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {article.imageUrl && (
+                        <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] h-32 sm:h-48 md:h-64 lg:h-72 overflow-hidden rounded-xl mb-4 bg-neutral-900 relative mx-auto">
+                          <img
+                            src={article.imageUrl}
+                            alt="cover"
+                            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                            loading="lazy"
+                          />
+                        </div>
+                      )}
+                      <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] mx-auto">
+                        <p
+                          className={`text-neutral-400 text-sm md:text-base text-center ${
+                            article.imageUrl ? 'line-clamp-3' : 'line-clamp-5'
+                          }`}
+                        >
+                          {article.content}
+                        </p>
                       </div>
                     </div>
-                    
-                    {/* Feed Article Image */}
-                    {getImageUrl(article) && (
-                      <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] h-32 sm:h-48 md:h-64 lg:h-72 overflow-hidden rounded-xl mb-4 bg-neutral-900 relative mx-auto">
-                        <img 
-                          src={getImageUrl(article)} 
-                          alt={article.title}
-                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-                          loading="lazy"
-                        />
+
+                    {/* Admin actions row */}
+                    {isAdmin && (
+                      <div className="mt-4 flex items-center justify-center gap-3 w-full sm:w-[90%] md:w-[85%] lg:w-[50%]">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditClick(article);
+                          }}
+                          className="p-1.5 text-blue-400 hover:text-blue-300 transition-colors"
+                          aria-label="Edit"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                        {article.published && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestUnpublish(article._id);
+                            }}
+                            className="p-1.5 text-yellow-400 hover:text-yellow-300 transition-colors"
+                            aria-label="Unpublish"
+                          >
+                            <Eye size={16} />
+                          </button>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            requestDelete(article._id);
+                          }}
+                          className="p-1.5 text-red-400 hover:text-red-300 transition-colors"
+                          aria-label="Delete"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     )}
-                    
-                    {/* Content preview */}
-                    <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] mx-auto">
-                      <p className={`text-neutral-400 text-sm md:text-base text-center ${getImageUrl(article) ? 'line-clamp-3' : 'line-clamp-5'}`}>
-                        {article.content}
-                      </p>
-                    </div>
                   </motion.article>
                 ))
               )}
             </div>
-
-            {/* INFINITE SCROLL TARGET ANCHOR */}
             <div ref={observerTarget} className="h-10 w-full flex items-center justify-center my-8">
               {loading && (
                 <span className="text-sm text-neutral-500 animate-pulse tracking-wide">
@@ -455,14 +1039,25 @@ export default function Feed() {
                 </span>
               )}
               {!hasMore && articles.length > 0 && (
-                <span className="text-sm text-neutral-600">
-                  — End of stories —
-                </span>
+                <span className="text-sm text-neutral-600">— End of stories —</span>
               )}
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ✅ Generic Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModalOpen}
+        onCancel={() => setConfirmModalOpen(false)}
+        onConfirm={() => {
+          if (confirmAction) confirmAction();
+        }}
+        title={confirmTitle}
+        message={confirmMessage}
+        confirmLabel={confirmLabel}
+        confirmColor={confirmColor}
+      />
     </div>
   );
 }

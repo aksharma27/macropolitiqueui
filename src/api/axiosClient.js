@@ -1,15 +1,12 @@
 import axios from 'axios';
 
 const apiClient = axios.create({
-  baseURL: process.env.REACT_APP_BASE_URL,
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:4000',
   timeout: 10000,
   withCredentials: true,
-  headers: {
-    'Content-Type': 'application/json',
-  },
 });
 
-// Request interceptor - ENSURE credentials are always sent
+// Request interceptor
 apiClient.interceptors.request.use(
   (config) => {
     config.withCredentials = true;
@@ -17,34 +14,25 @@ apiClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    console.log('Request:', config.method.toUpperCase(), config.url, {
-      withCredentials: config.withCredentials,
-      hasAuth: !!config.headers.Authorization
-    });
+    // Only set Content-Type if not FormData
+    if (!(config.data instanceof FormData)) {
+      config.headers['Content-Type'] = 'application/json';
+    }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor - handle auth errors
+// Response interceptor
 apiClient.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      console.error('Unauthorized - Session might be expired');
-      
-      // Don't clear storage immediately on 401 for all requests
-      // Only redirect to login if it's not a login request itself
+      console.error('Unauthorized – session expired');
       if (!error.config.url.includes('/auth/login')) {
         localStorage.removeItem('userRole');
         localStorage.removeItem('isLoggedIn');
         localStorage.removeItem('userEmail');
-        
-        // Use replace to avoid back-button issues
         window.location.replace('/auth');
       }
     }
@@ -52,39 +40,73 @@ apiClient.interceptors.response.use(
   }
 );
 
-export const fetchArticles = async (page = 1, limit = 20) => {
+// ---------- API FUNCTIONS ----------
+
+// Fetch articles (public)
+export const fetchArticles = async (options = {}) => {
+  const { page = 1, limit = 20, search = '', sort = 'desc' } = options;
   const response = await apiClient.get('/posts', {
-    params: { page, limit }
+    params: { page, limit, search, sort },
   });
   return response.data.posts || response.data;
 };
 
-export const postArticle = async (articleData) => {
-  const response = await apiClient.post('/posts', articleData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
+// Post a new article (public – but will be set to pending)
+export const postArticle = async (data) => {
+  const isFormData = data instanceof FormData;
+  const response = await apiClient.post('/posts', data, {
+    headers: isFormData ? {} : { 'Content-Type': 'application/json' },
   });
   return response.data;
 };
 
-export const loginUser = async (credentials) => {
-  const response = await apiClient.post('/auth/login', credentials);
-  return response.data;
-};
-
+// Admin: approve a post
 export const approvePost = async (postId) => {
   const response = await apiClient.post(`/posts/${postId}/approve`);
   return response.data;
 };
 
+// Admin: update a post (can send FormData with image or JSON)
 export const updatePost = async (postId, updateData) => {
-  const response = await apiClient.patch(`/posts/${postId}`, updateData);
+  const config = updateData instanceof FormData
+    ? {}
+    : { headers: { 'Content-Type': 'application/json' } };
+  const response = await apiClient.patch(`/posts/${postId}`, updateData, config);
   return response.data;
 };
 
+// Admin: fetch all posts (including unpublished)
 export const fetchAllPosts = async () => {
   const response = await apiClient.get('/posts/all-posts');
+  return response.data;
+};
+
+// Admin: delete a post
+export const deletePost = async (postId) => {
+  const response = await apiClient.delete(`/posts/${postId}`);
+  return response.data;
+};
+
+// OTP for article verification (public)
+export const sendArticleOtp = async (email) => {
+  const response = await apiClient.post('/posts/send-otp', { email });
+  return response.data;
+};
+
+export const verifyArticleOtp = async ({ email, otp }) => {
+  const response = await apiClient.post('/posts/verify-otp', { email, otp });
+  return response.data;
+};
+
+// Check if email is already verified
+export const checkEmailVerified = async (email) => {
+  const response = await apiClient.post('/posts/check-email', { email });
+  return response.data;
+};
+
+// Auth endpoints
+export const loginUser = async (credentials) => {
+  const response = await apiClient.post('/auth/login', credentials);
   return response.data;
 };
 
