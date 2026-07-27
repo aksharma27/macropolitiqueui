@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://macropolittiquebackend-1.onrender.com"
+    }
+  ]
+}

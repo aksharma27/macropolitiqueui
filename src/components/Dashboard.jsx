@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import LogoutButton from './LogoutButton';
+import ContactFooter from '../components/ContactFooter';
 import { approvePost, updatePost, fetchAllPosts, deletePost } from '../api/axiosClient';
 
 // Toast Component
@@ -402,6 +403,7 @@ export default function Dashboard() {
   const [successMessage, setSuccessMessage] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const navigate = useNavigate();
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // Delete modal state
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
@@ -733,6 +735,7 @@ export default function Dashboard() {
         onConfirm={confirmDelete}
         message="Are you sure you want to delete this article?"
       />
-    </div>
+      <ContactFooter/>
+</div>
   );
 }

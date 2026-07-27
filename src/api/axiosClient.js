@@ -125,4 +125,9 @@ export const resetPassword = async (data) => {
   return response.data;
 };
 
+export const sendContactMessage = async (data) => {
+  const response = await apiClient.post('/contact', data);
+  return response.data;
+};
+
 export default apiClient;

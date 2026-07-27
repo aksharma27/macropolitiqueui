@@ -24,6 +24,7 @@ import {
 } from '../api/axiosClient';
 import LogoutButton from './LogoutButton';
 import ErrorComponent from './ErrorComponent';
+import ContactFooter from './ContactFooter';
 import { useNavigate } from 'react-router-dom';
 
 // ✅ Generic Confirmation Modal Component
@@ -34,7 +35,7 @@ function ConfirmModal({
   title = 'Are you sure?',
   message = 'This action cannot be undone.',
   confirmLabel = 'Confirm',
-  confirmColor = 'red', // 'red', 'yellow', 'green'
+  confirmColor = 'red',
 }) {
   if (!isOpen) return null;
 
@@ -88,7 +89,6 @@ export default function Feed() {
   const navigate = useNavigate();
   const isAdmin = localStorage.getItem('userRole') === 'admin';
 
-  // Refs to control initial load and observer
   const initialLoadDone = useRef(false);
   const initialLoadInProgress = useRef(false);
   const observerSetupDone = useRef(false);
@@ -97,6 +97,7 @@ export default function Feed() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOrder, setSortOrder] = useState('desc');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   // Admin edit state
   const [isEditing, setIsEditing] = useState(false);
@@ -108,15 +109,15 @@ export default function Feed() {
   });
   const [editLoading, setEditLoading] = useState(false);
 
-  // ✅ Generic confirm modal state
+  // Confirm modal state
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
-  const [confirmAction, setConfirmAction] = useState(null); // function to call on confirm
+  const [confirmAction, setConfirmAction] = useState(null);
   const [confirmTitle, setConfirmTitle] = useState('Are you sure?');
   const [confirmMessage, setConfirmMessage] = useState('This action cannot be undone.');
   const [confirmLabel, setConfirmLabel] = useState('Confirm');
   const [confirmColor, setConfirmColor] = useState('red');
 
-  // Debounce search input
+  // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery);
@@ -124,7 +125,7 @@ export default function Feed() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  // Reset feed when search or sort changes – skip first run
+  // Reset feed when search or sort changes
   const isFirstSearchSortRun = useRef(true);
   useEffect(() => {
     if (isFirstSearchSortRun.current) {
@@ -142,7 +143,7 @@ export default function Feed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, sortOrder]);
 
-  // Article form states (for creation)
+  // Article form states
   const [formTitle, setFormTitle] = useState('');
   const [formAuthor, setFormAuthor] = useState('');
   const [formEmail, setFormEmail] = useState('');
@@ -220,7 +221,7 @@ export default function Feed() {
     [loading, hasMore, page, debouncedSearch, sortOrder]
   );
 
-  // Initial load – runs once
+  // Initial load
   useEffect(() => {
     if (!initialLoadDone.current && !initialLoadInProgress.current) {
       loadMore(true);
@@ -272,14 +273,11 @@ export default function Feed() {
     });
   };
 
-  // ----- Admin actions -----
-
-  // Unpublish: set published: false
+  // ----- Admin actions (unchanged) -----
   const handleUnpublish = async (articleId) => {
     try {
       setLoading(true);
       await updatePost(articleId, { published: false });
-      // Update local state
       setArticles((prev) =>
         prev.map((article) =>
           article._id === articleId ? { ...article, published: false } : article
@@ -297,7 +295,6 @@ export default function Feed() {
     }
   };
 
-  // Delete action
   const handleDelete = async (articleId) => {
     try {
       setLoading(true);
@@ -316,7 +313,6 @@ export default function Feed() {
     }
   };
 
-  // Open confirm modal for delete
   const requestDelete = (articleId) => {
     setConfirmTitle('Delete Article?');
     setConfirmMessage('Are you sure you want to delete this article? This action cannot be undone.');
@@ -326,7 +322,6 @@ export default function Feed() {
     setConfirmModalOpen(true);
   };
 
-  // Open confirm modal for unpublish
   const requestUnpublish = (articleId) => {
     setConfirmTitle('Unpublish Article?');
     setConfirmMessage('This article will no longer be visible to readers. You can publish it again later.');
@@ -336,7 +331,6 @@ export default function Feed() {
     setConfirmModalOpen(true);
   };
 
-  // Edit: open edit mode for the selected article
   const handleEditClick = (article) => {
     setSelectedArticle(article);
     setEditForm({
@@ -348,7 +342,6 @@ export default function Feed() {
     setIsEditing(true);
   };
 
-  // Save edited article
   const handleSaveEdit = async () => {
     try {
       setEditLoading(true);
@@ -507,7 +500,7 @@ export default function Feed() {
     setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
   };
 
-  // ----- JSX -----
+  // JSX – Header with mobile search overlay
   return (
     <div className="min-h-screen bg-black text-white selection:bg-neutral-800 overflow-x-hidden">
       <AnimatePresence>
@@ -523,80 +516,122 @@ export default function Feed() {
         )}
       </AnimatePresence>
 
-      {!selectedArticle && !isCreating && (
-        <header className="fixed top-0 left-1 right-1 z-50 bg-black/90 backdrop-blur-sm border-b border-neutral-900">
-          <div className="w-full h-16 flex items-center justify-between px-4 lg:px-[5px]">
-            <h1 className="text-2xl tracking-tight text-white">
-              <a href="/">
-                <span
-                  style={{
-                    fontFamily: "'Dancing Script', cursive",
-                    fontSize: '1.75rem',
-                    fontWeight: 900,
-                    WebkitTextStroke: '0.2px currentColor',
-                  }}
-                >
-                  MacroPolitique
-                </span>
-              </a>
-            </h1>
-            <div className="flex items-center gap-3">
-              <div className="relative hidden sm:block">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search articles..."
-                  className="bg-neutral-800/50 border border-neutral-700 rounded-full px-4 py-1.5 pl-9 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-neutral-400 transition-colors w-40 md:w-56"
-                />
-                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-              </div>
+  {!selectedArticle && !isCreating && (
+  <header className="fixed top-0 left-0 right-0 z-50 bg-black/40 backdrop-blur-md border-b border-white/10">
+    {/* Row 1: Title only, centered */}
+    <div className="w-full py-2 text-center border-b border-white/5">
+      <a href="/">
+        <span
+          style={{
+            fontFamily: "'Cormorant Garamond', serif",
+            fontSize: "1.30rem",
+            fontWeight: 700,
+            letterSpacing: "0.5px",
+            color: "#ffffff",
+            textShadow: "0 0 8px rgba(0,0,0,0.6), 0 2px 4px rgba(0,0,0,0.4)",
+            WebkitTextStroke: "0.5px rgba(0,0,0,0.3)",
+            textStroke: "0.5px rgba(0,0,0,0.3)",
+          }}
+        >
+          The MacroPolitique
+        </span>
+      </a>
+    </div>
 
-              <button
-                onClick={toggleSort}
-                className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 rounded-full transition-colors text-xs text-neutral-300"
-                aria-label="Toggle sort order"
-              >
-                <ArrowUpDown size={14} />
-                <span className="hidden xs:inline">
-                  {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
-                </span>
-              </button>
+    {/* Row 2: Controls (sort, search, buttons) */}
+    <div className="w-full flex items-center justify-between px-4 py-2 gap-2">
+      {/* Left group: sort + search */}
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        {/* Sort button – always visible */}
+        <button
+          onClick={toggleSort}
+          className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 rounded-full transition-colors text-xs text-neutral-300 flex-shrink-0"
+          aria-label="Toggle sort order"
+        >
+          <ArrowUpDown size={14} />
+          <span className="hidden xs:inline">
+            {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
+          </span>
+        </button>
 
-              {(localStorage.getItem('isLoggedIn') === 'true' || isAdmin) && <LogoutButton />}
-              {localStorage.getItem('isLoggedIn') && isAdmin && (
-                <button
-                  onClick={() => navigate('/dashboard')}
-                  className="cursor-pointer flex items-center gap-2 bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold px-4 py-2 rounded-full transition-colors text-sm"
-                >
-                  <LayoutDashboard size={16} />
-                  <span className="hidden sm:inline">Dashboard</span>
-                </button>
-              )}
-              <button
-                onClick={() => setIsCreating(true)}
-                className="cursor-pointer flex items-center gap-2 bg-neutral-600 hover:bg-neutral-800 px-4 py-2 rounded-full transition-colors text-sm text-white"
-              >
-                <NotebookPen size={16} />
-                <span className="hidden sm:inline">Write For Us</span>
-              </button>
-            </div>
-          </div>
+        {/* Desktop search bar – hidden on mobile */}
+        <div className="relative hidden sm:block flex-1 max-w-xs">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search articles..."
+            className="w-full bg-neutral-800/50 border border-neutral-700 rounded-full px-4 py-1.5 pl-9 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-neutral-400 transition-colors"
+          />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+        </div>
 
-          <div className="sm:hidden px-4 py-2 border-t border-neutral-800">
-            <div className="relative">
+        {/* Mobile search icon – visible only on mobile */}
+        <button
+          onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+          className="sm:hidden text-neutral-400 hover:text-white transition-colors"
+          aria-label="Toggle search"
+        >
+          <Search size={20} />
+        </button>
+      </div>
+
+      {/* Right group: buttons */}
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {(localStorage.getItem('isLoggedIn') === 'true' || isAdmin) && <LogoutButton />}
+        {localStorage.getItem('isLoggedIn') && isAdmin && (
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="cursor-pointer flex items-center gap-2 bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold px-3 py-1.5 rounded-full transition-colors text-xs"
+          >
+            <LayoutDashboard size={14} />
+            <span className="hidden sm:inline">Dashboard</span>
+          </button>
+        )}
+        <button
+          onClick={() => setIsCreating(true)}
+          className="cursor-pointer flex items-center gap-2 bg-neutral-600 hover:bg-neutral-800 px-3 py-1.5 rounded-full transition-colors text-xs text-white"
+        >
+          <NotebookPen size={14} />
+          <span className="hidden sm:inline">Write For Us</span>
+        </button>
+      </div>
+    </div>
+
+    {/* Mobile search overlay (only search + close) */}
+    <AnimatePresence>
+      {mobileSearchOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="sm:hidden bg-black/95 backdrop-blur-md border-t border-white/10 px-4 py-3"
+        >
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search articles..."
                 className="w-full bg-neutral-800/50 border border-neutral-700 rounded-full px-4 py-2 pl-9 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-neutral-400 transition-colors"
+                autoFocus
               />
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
             </div>
+            <button
+              onClick={() => setMobileSearchOpen(false)}
+              className="text-neutral-400 hover:text-white transition-colors"
+              aria-label="Close search"
+            >
+              <X size={20} />
+            </button>
           </div>
-        </header>
+        </motion.div>
       )}
+    </AnimatePresence>
+  </header>
+)}
 
       <AnimatePresence mode="wait">
         {isCreating ? (
@@ -629,8 +664,16 @@ export default function Feed() {
                 <ArrowLeft size={20} /> <span>Back to Feed</span>
               </button>
 
-              <h1 className="text-3xl font-bold mb-8">Draft New Article</h1>
-
+              <h1 className="text-3xl font-bold mb-8">Write for us</h1>
+              <span>
+                Before submitting, please ensure that your article is entirely your own original work. 
+                We do not accept content that is plagiarised, substantially copied or generated wholly or 
+                partially using artificial intelligence (AI) tools. 
+                By submitting, you confirm that your manuscript has been written independently, 
+                all sources have been appropriately cited and the work has not been published elsewhere. 
+                The Macropolitique reserves the right to reject any submission that fails to meet these 
+                originality and editorial standards.
+              </span>
               <div className="mb-6">
                 <ErrorComponent message={error} visible={!!error} onRetry={() => setError(null)} />
               </div>
@@ -764,7 +807,7 @@ export default function Feed() {
             </div>
           </motion.div>
         ) : selectedArticle ? (
-          // Full Article View
+          // Full Article View (unchanged)
           <motion.div
             key="article-view"
             initial={{ opacity: 0, x: 20 }}
@@ -819,7 +862,6 @@ export default function Feed() {
 
             <div className="max-w-4xl mx-auto mt-8 px-4 sm:px-6 lg:px-8">
               {isEditing ? (
-                // Edit mode
                 <div className="space-y-6">
                   <input
                     type="text"
@@ -868,7 +910,6 @@ export default function Feed() {
                   </div>
                 </div>
               ) : (
-                // View mode
                 <>
                   <div className="text-center mb-8">
                     <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold mb-4 tracking-tight">
@@ -905,13 +946,15 @@ export default function Feed() {
             </div>
           </motion.div>
         ) : (
-          // Feed View
+          // Feed View – with blur when mobile search is open
           <motion.div
             key="feed-view"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="max-w-3xl mx-auto px-4 pt-28 pb-16 flex flex-col items-center"
+            className={`max-w-3xl mx-auto px-4 pt-28 pb-16 flex flex-col items-center transition-all duration-300 ${
+              mobileSearchOpen ? 'blur-sm pointer-events-none' : ''
+            }`}
           >
             <div className="w-full mb-8">
               <ErrorComponent
@@ -1042,11 +1085,13 @@ export default function Feed() {
                 <span className="text-sm text-neutral-600">— End of stories —</span>
               )}
             </div>
+
+            <ContactFooter />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ✅ Generic Confirm Modal */}
+      {/* Confirm Modal */}
       <ConfirmModal
         isOpen={confirmModalOpen}
         onCancel={() => setConfirmModalOpen(false)}
