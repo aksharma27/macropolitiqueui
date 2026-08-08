@@ -12,6 +12,8 @@ import {
   ArrowUpDown,
   Edit3,
   Eye,
+  Share2,
+  Copy,
 } from 'lucide-react';
 import {
   fetchArticles,
@@ -27,7 +29,44 @@ import ErrorComponent from './ErrorComponent';
 import ContactFooter from './ContactFooter';
 import { useNavigate } from 'react-router-dom';
 
-// ✅ Generic Confirmation Modal Component
+// ===== Custom SVG icons for LinkedIn and WhatsApp =====
+const LinkedInIcon = ({ size = 16, className = '' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+    <rect x="2" y="9" width="4" height="12" />
+    <circle cx="4" cy="4" r="2" />
+  </svg>
+);
+
+const WhatsAppIcon = ({ size = 16, className = '' }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+  </svg>
+);
+
+// ===== Confirm Modal (unchanged) =====
 function ConfirmModal({
   isOpen,
   onCancel,
@@ -76,6 +115,7 @@ function ConfirmModal({
   );
 }
 
+// ===== Main Feed Component =====
 export default function Feed() {
   const [articles, setArticles] = useState([]);
   const [page, setPage] = useState(1);
@@ -116,6 +156,10 @@ export default function Feed() {
   const [confirmMessage, setConfirmMessage] = useState('This action cannot be undone.');
   const [confirmLabel, setConfirmLabel] = useState('Confirm');
   const [confirmColor, setConfirmColor] = useState('red');
+
+  // Share states for feed cards
+  const [shareOpenFor, setShareOpenFor] = useState(null); // article ID or null
+  const [copySuccessId, setCopySuccessId] = useState(null); // article ID that was copied
 
   // Debounce search
   useEffect(() => {
@@ -263,6 +307,18 @@ export default function Feed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [articles.length, loading, hasMore, selectedArticle, isCreating, loadMore]);
 
+  // Close share dropdown on outside click
+  useEffect(() => {
+    if (shareOpenFor === null) return;
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('.share-dropdown')) {
+        setShareOpenFor(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [shareOpenFor]);
+
   const formatDate = (isoString) => {
     if (!isoString) return '';
     return new Date(isoString).toLocaleString('en-US', {
@@ -270,6 +326,42 @@ export default function Feed() {
       day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
+    });
+  };
+
+  // ----- Share helpers (for single article view) -----
+  const getShareUrl = (articleId) => {
+    const base = window.location.origin + window.location.pathname;
+    return `${base}?article=${articleId}`;
+  };
+
+  const shareOnLinkedIn = (url, title) => {
+    window.open(
+      `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`,
+      '_blank'
+    );
+  };
+
+  const shareOnWhatsApp = (url, title) => {
+    window.open(
+      `https://api.whatsapp.com/send?text=${encodeURIComponent(title + ' ' + url)}`,
+      '_blank'
+    );
+  };
+
+  const shareOnTwitter = (url, title) => {
+    window.open(
+      `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(
+        title
+      )}`,
+      '_blank'
+    );
+  };
+
+  const copyLink = (url, articleId) => {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopySuccessId(articleId);
+      setTimeout(() => setCopySuccessId(null), 2000);
     });
   };
 
@@ -500,7 +592,7 @@ export default function Feed() {
     setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
   };
 
-  // JSX – Header with mobile search overlay
+  // ===== JSX =====
   return (
     <div className="min-h-screen bg-black text-white selection:bg-neutral-800 overflow-x-hidden">
       <AnimatePresence>
@@ -516,122 +608,117 @@ export default function Feed() {
         )}
       </AnimatePresence>
 
-  {!selectedArticle && !isCreating && (
-  <header className="fixed top-0 left-0 right-0 z-50 bg-black/40 backdrop-blur-md border-b border-white/10">
-    {/* Row 1: Title only, centered */}
-    <div className="w-full py-2 text-center border-b border-white/5">
-      <a href="/">
-        <span
-          style={{
-            fontFamily: "'Cormorant Garamond', serif",
-            fontSize: "1.30rem",
-            fontWeight: 700,
-            letterSpacing: "0.5px",
-            color: "#ffffff",
-            textShadow: "0 0 8px rgba(0,0,0,0.6), 0 2px 4px rgba(0,0,0,0.4)",
-            WebkitTextStroke: "0.5px rgba(0,0,0,0.3)",
-            textStroke: "0.5px rgba(0,0,0,0.3)",
-          }}
-        >
-          The MacroPolitique
-        </span>
-      </a>
-    </div>
-
-    {/* Row 2: Controls (sort, search, buttons) */}
-    <div className="w-full flex items-center justify-between px-4 py-2 gap-2">
-      {/* Left group: sort + search */}
-      <div className="flex items-center gap-2 flex-1 min-w-0">
-        {/* Sort button – always visible */}
-        <button
-          onClick={toggleSort}
-          className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 rounded-full transition-colors text-xs text-neutral-300 flex-shrink-0"
-          aria-label="Toggle sort order"
-        >
-          <ArrowUpDown size={14} />
-          <span className="hidden xs:inline">
-            {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
-          </span>
-        </button>
-
-        {/* Desktop search bar – hidden on mobile */}
-        <div className="relative hidden sm:block flex-1 max-w-xs">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search articles..."
-            className="w-full bg-neutral-800/50 border border-neutral-700 rounded-full px-4 py-1.5 pl-9 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-neutral-400 transition-colors"
-          />
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-        </div>
-
-        {/* Mobile search icon – visible only on mobile */}
-        <button
-          onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-          className="sm:hidden text-neutral-400 hover:text-white transition-colors"
-          aria-label="Toggle search"
-        >
-          <Search size={20} />
-        </button>
-      </div>
-
-      {/* Right group: buttons */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {(localStorage.getItem('isLoggedIn') === 'true' || isAdmin) && <LogoutButton />}
-        {localStorage.getItem('isLoggedIn') && isAdmin && (
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="cursor-pointer flex items-center gap-2 bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold px-3 py-1.5 rounded-full transition-colors text-xs"
-          >
-            <LayoutDashboard size={14} />
-            <span className="hidden sm:inline">Dashboard</span>
-          </button>
-        )}
-        <button
-          onClick={() => setIsCreating(true)}
-          className="cursor-pointer flex items-center gap-2 bg-neutral-600 hover:bg-neutral-800 px-3 py-1.5 rounded-full transition-colors text-xs text-white"
-        >
-          <NotebookPen size={14} />
-          <span className="hidden sm:inline">Write For Us</span>
-        </button>
-      </div>
-    </div>
-
-    {/* Mobile search overlay (only search + close) */}
-    <AnimatePresence>
-      {mobileSearchOpen && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className="sm:hidden bg-black/95 backdrop-blur-md border-t border-white/10 px-4 py-3"
-        >
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search articles..."
-                className="w-full bg-neutral-800/50 border border-neutral-700 rounded-full px-4 py-2 pl-9 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-neutral-400 transition-colors"
-                autoFocus
-              />
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
-            </div>
-            <button
-              onClick={() => setMobileSearchOpen(false)}
-              className="text-neutral-400 hover:text-white transition-colors"
-              aria-label="Close search"
-            >
-              <X size={20} />
-            </button>
+      {!selectedArticle && !isCreating && (
+        <header className="fixed top-0 left-0 right-0 z-50 bg-black/40 backdrop-blur-md border-b border-white/10">
+          {/* Row 1: Title only, centered */}
+          <div className="w-full py-2 text-center border-b border-white/5">
+            <a href="/">
+              <span
+                style={{
+                  fontFamily: "'Cormorant Garamond', serif",
+                  fontSize: "1.30rem",
+                  fontWeight: 700,
+                  letterSpacing: "0.5px",
+                  color: "#ffffff",
+                  textShadow: "0 0 8px rgba(0,0,0,0.6), 0 2px 4px rgba(0,0,0,0.4)",
+                  WebkitTextStroke: "0.5px rgba(0,0,0,0.3)",
+                  textStroke: "0.5px rgba(0,0,0,0.3)",
+                }}
+              >
+                The MacroPolitique
+              </span>
+            </a>
           </div>
-        </motion.div>
+
+          {/* Row 2: Controls */}
+          <div className="w-full flex items-center justify-between px-4 py-2 gap-2">
+            <div className="flex items-center gap-2 flex-1 min-w-0">
+              <button
+                onClick={toggleSort}
+                className="flex items-center gap-1.5 bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 rounded-full transition-colors text-xs text-neutral-300 flex-shrink-0"
+                aria-label="Toggle sort order"
+              >
+                <ArrowUpDown size={14} />
+                <span className="hidden xs:inline">
+                  {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
+                </span>
+              </button>
+
+              <div className="relative hidden sm:block flex-1 max-w-xs">
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search articles..."
+                  className="w-full bg-neutral-800/50 border border-neutral-700 rounded-full px-4 py-1.5 pl-9 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-neutral-400 transition-colors"
+                />
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+              </div>
+
+              <button
+                onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+                className="sm:hidden text-neutral-400 hover:text-white transition-colors"
+                aria-label="Toggle search"
+              >
+                <Search size={20} />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {(localStorage.getItem('isLoggedIn') === 'true' || isAdmin) && <LogoutButton />}
+              {localStorage.getItem('isLoggedIn') && isAdmin && (
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="cursor-pointer flex items-center gap-2 bg-[#39FF14] hover:bg-[#32E612] text-black font-semibold px-3 py-1.5 rounded-full transition-colors text-xs"
+                >
+                  <LayoutDashboard size={14} />
+                  <span className="hidden sm:inline">Dashboard</span>
+                </button>
+              )}
+              <button
+                onClick={() => setIsCreating(true)}
+                className="cursor-pointer flex items-center gap-2 bg-neutral-600 hover:bg-neutral-800 px-3 py-1.5 rounded-full transition-colors text-xs text-white"
+              >
+                <NotebookPen size={14} />
+                <span className="hidden sm:inline">Write For Us</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile search overlay */}
+          <AnimatePresence>
+            {mobileSearchOpen && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="sm:hidden bg-black/95 backdrop-blur-md border-t border-white/10 px-4 py-3"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search articles..."
+                      className="w-full bg-neutral-800/50 border border-neutral-700 rounded-full px-4 py-2 pl-9 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-neutral-400 transition-colors"
+                      autoFocus
+                    />
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" />
+                  </div>
+                  <button
+                    onClick={() => setMobileSearchOpen(false)}
+                    className="text-neutral-400 hover:text-white transition-colors"
+                    aria-label="Close search"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </header>
       )}
-    </AnimatePresence>
-  </header>
-)}
 
       <AnimatePresence mode="wait">
         {isCreating ? (
@@ -807,7 +894,7 @@ export default function Feed() {
             </div>
           </motion.div>
         ) : selectedArticle ? (
-          // Full Article View (unchanged)
+          // Full Article View with Share button (unchanged)
           <motion.div
             key="article-view"
             initial={{ opacity: 0, x: 20 }}
@@ -820,12 +907,83 @@ export default function Feed() {
                 onClick={() => {
                   setSelectedArticle(null);
                   setIsEditing(false);
+                  setShareOpenFor(null);
                 }}
                 className="flex items-center space-x-2 text-neutral-400 hover:text-white transition-colors py-2"
               >
                 <ArrowLeft size={15} /> <span>Back</span>
               </button>
               <div className="flex items-center gap-2">
+                {/* Share Button with Dropdown (same as before) */}
+                <div className="relative share-dropdown">
+                  <button
+                    onClick={() => setShareOpenFor(selectedArticle._id)}
+                    className="p-2 text-neutral-400 hover:text-white transition-colors"
+                    aria-label="Share article"
+                  >
+                    <Share2 size={18} />
+                  </button>
+                  <AnimatePresence>
+                    {shareOpenFor === selectedArticle._id && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9, y: -5 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: -5 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute right-0 mt-2 w-48 bg-neutral-800 border border-neutral-700 rounded-xl shadow-xl overflow-hidden z-50"
+                      >
+                        <div className="p-2 space-y-1">
+                          <button
+                            onClick={() => {
+                              const url = getShareUrl(selectedArticle._id);
+                              shareOnLinkedIn(url, selectedArticle.title);
+                              setShareOpenFor(null);
+                            }}
+                            className="flex items-center gap-3 w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 rounded-lg transition-colors"
+                          >
+                            <LinkedInIcon size={16} className="text-blue-500" />
+                            LinkedIn
+                          </button>
+                          <button
+                            onClick={() => {
+                              const url = getShareUrl(selectedArticle._id);
+                              shareOnWhatsApp(url, selectedArticle.title);
+                              setShareOpenFor(null);
+                            }}
+                            className="flex items-center gap-3 w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 rounded-lg transition-colors"
+                          >
+                            <WhatsAppIcon size={16} className="text-green-500" />
+                            WhatsApp
+                          </button>
+                          <button
+                            onClick={() => {
+                              const url = getShareUrl(selectedArticle._id);
+                              shareOnTwitter(url, selectedArticle.title);
+                              setShareOpenFor(null);
+                            }}
+                            className="flex items-center gap-3 w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 rounded-lg transition-colors"
+                          >
+                            <X size={16} className="text-sky-400" />
+                            X (Twitter)
+                          </button>
+                          <button
+                            onClick={() => {
+                              const url = getShareUrl(selectedArticle._id);
+                              copyLink(url, selectedArticle._id);
+                              setShareOpenFor(null);
+                            }}
+                            className="flex items-center gap-3 w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 rounded-lg transition-colors"
+                          >
+                            <Copy size={16} className="text-purple-400" />
+                            {copySuccessId === selectedArticle._id ? 'Copied!' : 'Copy Link (for Instagram)'}
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Admin actions */}
                 {isAdmin && (
                   <>
                     {!isEditing && (
@@ -946,7 +1104,7 @@ export default function Feed() {
             </div>
           </motion.div>
         ) : (
-          // Feed View – with blur when mobile search is open
+          // Feed View – with share button on each card
           <motion.div
             key="feed-view"
             initial={{ opacity: 0 }}
@@ -978,101 +1136,184 @@ export default function Feed() {
                   <p className="text-sm mt-2">Try adjusting your search or publish the first article!</p>
                 </div>
               ) : (
-                articles.map((article, index) => (
-                  <motion.article
-                    key={article._id || article.id || index}
-                    initial={{ opacity: 0, y: 20 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: '-50px' }}
-                    transition={{ duration: 0.4, delay: (index % 5) * 0.1 }}
-                    className="group w-full cursor-pointer border-b border-neutral-900 pb-12 flex flex-col items-center"
-                  >
-                    <div
-                      onClick={() => setSelectedArticle(article)}
-                      className="w-full flex flex-col items-center"
+                articles.map((article, index) => {
+                  const articleId = article._id || article.id;
+                  return (
+                    <motion.article
+                      key={articleId || index}
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, margin: '-50px' }}
+                      transition={{ duration: 0.4, delay: (index % 5) * 0.1 }}
+                      className="group w-full cursor-pointer border-b border-neutral-900 pb-12 flex flex-col items-center"
                     >
-                      <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] text-center">
-                        <h2 className="text-xl md:text-2xl lg:text-3xl font-semibold mb-[0.125rem] group-hover:text-neutral-300 transition-colors">
-                          {article.title}
-                        </h2>
-                        <div className="mb-4 flex items-center justify-center space-x-2">
-                          <span className="text-sm font-medium text-neutral-400">
-                            {article.author}
-                          </span>
-                          <span className="text-xs text-neutral-600">
-                            {formatDate(article.publishedOn || article.createdAt)}
-                          </span>
-                          {isAdmin && (
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${
-                              article.published
-                                ? 'bg-green-900/30 text-green-400'
-                                : 'bg-yellow-900/30 text-yellow-400'
-                            }`}>
-                              {article.published ? 'Published' : 'Draft'}
+                      <div
+                        onClick={() => setSelectedArticle(article)}
+                        className="w-full flex flex-col items-center"
+                      >
+                        <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] text-center">
+                          <h2 className="text-xl md:text-2xl lg:text-3xl font-semibold mb-[0.125rem] group-hover:text-neutral-300 transition-colors">
+                            {article.title}
+                          </h2>
+                          <div className="mb-4 flex items-center justify-center space-x-2">
+                            <span className="text-sm font-medium text-neutral-400">
+                              {article.author}
                             </span>
-                          )}
+                            <span className="text-xs text-neutral-600">
+                              {formatDate(article.publishedOn || article.createdAt)}
+                            </span>
+                            {isAdmin && (
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                article.published
+                                  ? 'bg-green-900/30 text-green-400'
+                                  : 'bg-yellow-900/30 text-yellow-400'
+                              }`}>
+                                {article.published ? 'Published' : 'Draft'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {article.imageUrl && (
+                          <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] h-32 sm:h-48 md:h-64 lg:h-72 overflow-hidden rounded-xl mb-4 bg-neutral-900 relative mx-auto">
+                            <img
+                              src={article.imageUrl}
+                              alt="cover"
+                              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                              loading="lazy"
+                            />
+                          </div>
+                        )}
+                        <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] mx-auto">
+                          <p
+                            className={`text-neutral-400 text-sm md:text-base text-center ${
+                              article.imageUrl ? 'line-clamp-3' : 'line-clamp-5'
+                            }`}
+                          >
+                            {article.content}
+                          </p>
                         </div>
                       </div>
-                      {article.imageUrl && (
-                        <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] h-32 sm:h-48 md:h-64 lg:h-72 overflow-hidden rounded-xl mb-4 bg-neutral-900 relative mx-auto">
-                          <img
-                            src={article.imageUrl}
-                            alt="cover"
-                            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
-                            loading="lazy"
-                          />
-                        </div>
-                      )}
-                      <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] mx-auto">
-                        <p
-                          className={`text-neutral-400 text-sm md:text-base text-center ${
-                            article.imageUrl ? 'line-clamp-3' : 'line-clamp-5'
-                          }`}
-                        >
-                          {article.content}
-                        </p>
-                      </div>
-                    </div>
 
-                    {/* Admin actions row */}
-                    {isAdmin && (
+                      {/* Actions Row: Share + Admin buttons */}
                       <div className="mt-4 flex items-center justify-center gap-3 w-full sm:w-[90%] md:w-[85%] lg:w-[50%]">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEditClick(article);
-                          }}
-                          className="p-1.5 text-blue-400 hover:text-blue-300 transition-colors"
-                          aria-label="Edit"
-                        >
-                          <Edit3 size={16} />
-                        </button>
-                        {article.published && (
+                        {/* Share Button for this article */}
+                        <div className="relative share-dropdown">
                           <button
                             onClick={(e) => {
-                              e.stopPropagation();
-                              requestUnpublish(article._id);
+                              e.stopPropagation(); // prevent opening article
+                              setShareOpenFor(shareOpenFor === articleId ? null : articleId);
                             }}
-                            className="p-1.5 text-yellow-400 hover:text-yellow-300 transition-colors"
-                            aria-label="Unpublish"
+                            className="p-1.5 text-neutral-400 hover:text-white transition-colors"
+                            aria-label="Share article"
                           >
-                            <Eye size={16} />
+                            <Share2 size={16} />
                           </button>
+                          <AnimatePresence>
+                            {shareOpenFor === articleId && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: -5 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: -5 }}
+                                transition={{ duration: 0.15 }}
+                                className="absolute left-0 mt-2 w-48 bg-neutral-800 border border-neutral-700 rounded-xl shadow-xl overflow-hidden z-50"
+                                style={{ left: '50%', transform: 'translateX(-50%)' }}
+                              >
+                                <div className="p-2 space-y-1">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const url = getShareUrl(articleId);
+                                      shareOnLinkedIn(url, article.title);
+                                      setShareOpenFor(null);
+                                    }}
+                                    className="flex items-center gap-3 w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 rounded-lg transition-colors"
+                                  >
+                                    <LinkedInIcon size={16} className="text-blue-500" />
+                                    LinkedIn
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const url = getShareUrl(articleId);
+                                      shareOnWhatsApp(url, article.title);
+                                      setShareOpenFor(null);
+                                    }}
+                                    className="flex items-center gap-3 w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 rounded-lg transition-colors"
+                                  >
+                                    <WhatsAppIcon size={16} className="text-green-500" />
+                                    WhatsApp
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const url = getShareUrl(articleId);
+                                      shareOnTwitter(url, article.title);
+                                      setShareOpenFor(null);
+                                    }}
+                                    className="flex items-center gap-3 w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 rounded-lg transition-colors"
+                                  >
+                                    <X size={16} className="text-sky-400" />
+                                    X (Twitter)
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const url = getShareUrl(articleId);
+                                      copyLink(url, articleId);
+                                      setShareOpenFor(null);
+                                    }}
+                                    className="flex items-center gap-3 w-full px-3 py-2 text-sm text-neutral-300 hover:bg-neutral-700 rounded-lg transition-colors"
+                                  >
+                                    <Copy size={16} className="text-purple-400" />
+                                    {copySuccessId === articleId ? 'Copied!' : 'Copy Link (for Instagram)'}
+                                  </button>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+
+                        {/* Admin actions */}
+                        {isAdmin && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditClick(article);
+                              }}
+                              className="p-1.5 text-blue-400 hover:text-blue-300 transition-colors"
+                              aria-label="Edit"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                            {article.published && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  requestUnpublish(articleId);
+                                }}
+                                className="p-1.5 text-yellow-400 hover:text-yellow-300 transition-colors"
+                                aria-label="Unpublish"
+                              >
+                                <Eye size={16} />
+                              </button>
+                            )}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                requestDelete(articleId);
+                              }}
+                              className="p-1.5 text-red-400 hover:text-red-300 transition-colors"
+                              aria-label="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
                         )}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            requestDelete(article._id);
-                          }}
-                          className="p-1.5 text-red-400 hover:text-red-300 transition-colors"
-                          aria-label="Delete"
-                        >
-                          <Trash2 size={16} />
-                        </button>
                       </div>
-                    )}
-                  </motion.article>
-                ))
+                    </motion.article>
+                  );
+                })
               )}
             </div>
             <div ref={observerTarget} className="h-10 w-full flex items-center justify-center my-8">

@@ -280,26 +280,26 @@ function ArticleFullView({ post, onBack, onUpdate, onDeleteRequest }) {
               </label>
 
               {previewImage && (
-                <div className="mt-4 w-full h-48 md:h-64 rounded-xl overflow-hidden bg-neutral-900 relative">
-                  <img
-                    src={previewImage}
-                    alt="Preview"
-                    className="w-full h-full object-cover"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPreviewImage(null);
-                      setImageFile(null);
-                      const fileInput = document.querySelector('input[type="file"]');
-                      if (fileInput) fileInput.value = '';
-                    }}
-                    className="absolute top-2 right-2 bg-red-900/80 hover:bg-red-800 text-white p-1.5 rounded-full transition-colors"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              )}
+  <div className="mt-4 w-full h-48 md:h-64 rounded-xl overflow-hidden bg-neutral-900 relative">
+    <img
+      src={previewImage}
+      alt="Preview"
+      className="w-full h-full object-contain bg-neutral-800"
+    />
+    <button
+      type="button"
+      onClick={() => {
+        setPreviewImage(null);
+        setImageFile(null);
+        const fileInput = document.querySelector('input[type="file"]');
+        if (fileInput) fileInput.value = '';
+      }}
+      className="absolute top-2 right-2 bg-red-900/80 hover:bg-red-800 text-white p-1.5 rounded-full transition-colors"
+    >
+      <X size={16} />
+    </button>
+  </div>
+)}
             </div>
 
             <div className="w-full max-w-full overflow-hidden">
