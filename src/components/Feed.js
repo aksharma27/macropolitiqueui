@@ -1145,6 +1145,7 @@ export default function Feed() {
                     </h1>
                     <div className="mb-6 border-b border-neutral-800 pb-4">
                       <p className="text-neutral-300 font-medium">By {selectedArticle.author}</p>
+                      <p className="text-neutral-500 text-sm"> {selectedArticle.authorEmail}</p>
                       <p className="text-neutral-500 text-sm">
                         {formatDate(
                           selectedArticle.date || selectedArticle.publishedOn || selectedArticle.createdAt
