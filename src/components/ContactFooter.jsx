@@ -66,7 +66,7 @@ export default function ContactFooter() {
               <FaFacebook size={18} />
             </a>
             <a
-              href="https://instagram.com/yourpage"
+              href="https://www.instagram.com/macropolitique"
               target="_blank"
               rel="noopener noreferrer"
               className="text-neutral-400 hover:text-white transition-colors"
@@ -75,7 +75,7 @@ export default function ContactFooter() {
               <FaInstagram size={18} />
             </a>
             <a
-              href="https://youtube.com/yourchannel"
+              href="https://www.youtube.com/@themacropolitique"
               target="_blank"
               rel="noopener noreferrer"
               className="text-neutral-400 hover:text-white transition-colors"
