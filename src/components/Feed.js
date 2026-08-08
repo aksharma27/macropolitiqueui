@@ -1078,11 +1078,11 @@ export default function Feed() {
             <div ref={observerTarget} className="h-10 w-full flex items-center justify-center my-8">
               {loading && (
                 <span className="text-sm text-neutral-500 animate-pulse tracking-wide">
-                  Loading stories...
+                  Loading articles...
                 </span>
               )}
               {!hasMore && articles.length > 0 && (
-                <span className="text-sm text-neutral-600">— End of stories —</span>
+                <span className="text-sm text-neutral-600">— End of articles —</span>
               )}
             </div>
 
