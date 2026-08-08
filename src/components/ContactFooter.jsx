@@ -56,7 +56,7 @@ export default function ContactFooter() {
 
           <div className="flex items-center gap-4">
             {/* Social Icons */}
-            <a
+            {/* <a
               href="https://facebook.com/yourpage"
               target="_blank"
               rel="noopener noreferrer"
@@ -64,7 +64,7 @@ export default function ContactFooter() {
               aria-label="Facebook"
             >
               <FaFacebook size={18} />
-            </a>
+            </a> */}
             <a
               href="https://www.instagram.com/macropolitique"
               target="_blank"
