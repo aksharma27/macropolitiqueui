@@ -14,6 +14,7 @@ import {
   Eye,
   Share2,
   Copy,
+  Image as ImageIcon,
 } from 'lucide-react';
 import {
   fetchArticles,
@@ -28,6 +29,7 @@ import LogoutButton from './LogoutButton';
 import ErrorComponent from './ErrorComponent';
 import ContactFooter from './ContactFooter';
 import { useNavigate } from 'react-router-dom';
+import CropModal from './CropModal';
 
 // ===== Custom SVG icons for LinkedIn and WhatsApp =====
 const LinkedInIcon = ({ size = 16, className = '' }) => (
@@ -66,7 +68,7 @@ const WhatsAppIcon = ({ size = 16, className = '' }) => (
   </svg>
 );
 
-// ===== Confirm Modal (unchanged) =====
+// ===== Confirm Modal =====
 function ConfirmModal({
   isOpen,
   onCancel,
@@ -139,7 +141,7 @@ export default function Feed() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
-  // Admin edit state
+  // Admin edit state (for full article view)
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
     title: '',
@@ -158,8 +160,27 @@ export default function Feed() {
   const [confirmColor, setConfirmColor] = useState('red');
 
   // Share states for feed cards
-  const [shareOpenFor, setShareOpenFor] = useState(null); // article ID or null
-  const [copySuccessId, setCopySuccessId] = useState(null); // article ID that was copied
+  const [shareOpenFor, setShareOpenFor] = useState(null);
+  const [copySuccessId, setCopySuccessId] = useState(null);
+
+  // Article form states (for creation)
+  const [formTitle, setFormTitle] = useState('');
+  const [formAuthor, setFormAuthor] = useState('');
+  const [formEmail, setFormEmail] = useState('');
+  const [formContent, setFormContent] = useState('');
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [showOtpInput, setShowOtpInput] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [contentError, setContentError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [checkingEmail, setCheckingEmail] = useState(false);
+
+  // Image crop states
+  const [formImage, setFormImage] = useState(null);
+  const [formImagePreview, setFormImagePreview] = useState(null);
+  const [showCropModal, setShowCropModal] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -187,21 +208,7 @@ export default function Feed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedSearch, sortOrder]);
 
-  // Article form states
-  const [formTitle, setFormTitle] = useState('');
-  const [formAuthor, setFormAuthor] = useState('');
-  const [formEmail, setFormEmail] = useState('');
-  const [formContent, setFormContent] = useState('');
-  const [emailVerified, setEmailVerified] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpCode, setOtpCode] = useState('');
-  const [showOtpInput, setShowOtpInput] = useState(false);
-  const [otpError, setOtpError] = useState('');
-  const [contentError, setContentError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [checkingEmail, setCheckingEmail] = useState(false);
-
-  // loadMore – wrapped in useCallback
+  // loadMore
   const loadMore = useCallback(
     async (reset = false) => {
       if (loading || (!hasMore && !reset)) return;
@@ -329,7 +336,7 @@ export default function Feed() {
     });
   };
 
-  // ----- Share helpers (for single article view) -----
+  // ----- Share helpers -----
   const getShareUrl = (articleId) => {
     const base = window.location.origin + window.location.pathname;
     return `${base}?article=${articleId}`;
@@ -365,7 +372,31 @@ export default function Feed() {
     });
   };
 
-  // ----- Admin actions (unchanged) -----
+  // ----- Image crop handlers -----
+  const handleImageUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setFormImage(file);
+      setShowCropModal(true);
+    }
+  };
+
+  const handleCropComplete = (croppedFile) => {
+    setFormImage(croppedFile);
+    const url = URL.createObjectURL(croppedFile);
+    setFormImagePreview(url);
+    setShowCropModal(false);
+  };
+
+  const handleCropCancel = () => {
+    setShowCropModal(false);
+    setFormImage(null);
+    setFormImagePreview(null);
+    const input = document.querySelector('input[type="file"]');
+    if (input) input.value = '';
+  };
+
+  // ----- Admin actions (for editing from feed) -----
   const handleUnpublish = async (articleId) => {
     try {
       setLoading(true);
@@ -464,7 +495,7 @@ export default function Feed() {
     setSelectedArticle((prev) => prev);
   };
 
-  // ----- Creation OTP handlers (unchanged) -----
+  // ----- Creation OTP handlers -----
   const handleSendOtp = async () => {
     if (!formEmail) {
       setOtpError('Please enter your email first.');
@@ -557,6 +588,9 @@ export default function Feed() {
     formData.append('author', formAuthor);
     formData.append('authorEmail', formEmail);
     formData.append('content', formContent);
+    if (formImage) {
+      formData.append('image', formImage);
+    }
 
     try {
       await postArticle(formData);
@@ -566,6 +600,8 @@ export default function Feed() {
       setFormAuthor('');
       setFormEmail('');
       setFormContent('');
+      setFormImage(null);
+      setFormImagePreview(null);
       setEmailVerified(false);
       setOtpSent(false);
       setOtpCode('');
@@ -610,7 +646,6 @@ export default function Feed() {
 
       {!selectedArticle && !isCreating && (
         <header className="fixed top-0 left-0 right-0 z-50 bg-black/40 backdrop-blur-md border-b border-white/10">
-          {/* Row 1: Title only, centered */}
           <div className="w-full py-2 text-center border-b border-white/5">
             <a href="/">
               <span
@@ -630,7 +665,6 @@ export default function Feed() {
             </a>
           </div>
 
-          {/* Row 2: Controls */}
           <div className="w-full flex items-center justify-between px-4 py-2 gap-2">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <button
@@ -685,7 +719,6 @@ export default function Feed() {
             </div>
           </div>
 
-          {/* Mobile search overlay */}
           <AnimatePresence>
             {mobileSearchOpen && (
               <motion.div
@@ -722,7 +755,7 @@ export default function Feed() {
 
       <AnimatePresence mode="wait">
         {isCreating ? (
-          // Create Article View (unchanged)
+          // Create Article View with image upload & crop
           <motion.div
             key="create-view"
             initial={{ opacity: 0, y: 20 }}
@@ -739,6 +772,8 @@ export default function Feed() {
                   setFormAuthor('');
                   setFormEmail('');
                   setFormContent('');
+                  setFormImage(null);
+                  setFormImagePreview(null);
                   setEmailVerified(false);
                   setOtpSent(false);
                   setOtpCode('');
@@ -856,6 +891,43 @@ export default function Feed() {
                   )}
                 </div>
 
+                {/* Image Upload Section with Crop */}
+                <div>
+                  <label className="cursor-pointer flex items-center justify-center w-full md:w-auto md:inline-flex space-x-2 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 px-6 py-4 rounded-xl transition-all">
+                    <ImageIcon size={20} className="text-neutral-400" />
+                    <span className="text-neutral-300">
+                      {formImagePreview ? 'Change Cover Image' : 'Upload Cover Image (optional)'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                    />
+                  </label>
+                  {formImagePreview && (
+                    <div className="mt-4 w-full h-48 md:h-64 rounded-xl overflow-hidden bg-neutral-900 relative">
+                      <img
+                        src={formImagePreview}
+                        alt="Cover preview"
+                        className="w-full h-full object-contain bg-neutral-800"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormImagePreview(null);
+                          setFormImage(null);
+                          const input = document.querySelector('input[type="file"]');
+                          if (input) input.value = '';
+                        }}
+                        className="absolute top-2 right-2 bg-red-900/80 hover:bg-red-800 text-white p-1.5 rounded-full transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <textarea
                     value={formContent}
@@ -894,7 +966,7 @@ export default function Feed() {
             </div>
           </motion.div>
         ) : selectedArticle ? (
-          // Full Article View with Share button (unchanged)
+          // Full Article View (with share button)
           <motion.div
             key="article-view"
             initial={{ opacity: 0, x: 20 }}
@@ -914,7 +986,6 @@ export default function Feed() {
                 <ArrowLeft size={15} /> <span>Back</span>
               </button>
               <div className="flex items-center gap-2">
-                {/* Share Button with Dropdown (same as before) */}
                 <div className="relative share-dropdown">
                   <button
                     onClick={() => setShareOpenFor(selectedArticle._id)}
@@ -983,7 +1054,6 @@ export default function Feed() {
                   </AnimatePresence>
                 </div>
 
-                {/* Admin actions */}
                 {isAdmin && (
                   <>
                     {!isEditing && (
@@ -1092,7 +1162,7 @@ export default function Feed() {
                       <img
                         src={selectedArticle.imageUrl}
                         alt="Article cover"
-                        className="w-full h-56 md:h-80 lg:h-96 rounded-lg object-cover"
+                        className="w-full h-56 md:h-80 lg:h-96 rounded-lg object-contain bg-neutral-900"
                       />
                     </div>
                   )}
@@ -1104,7 +1174,7 @@ export default function Feed() {
             </div>
           </motion.div>
         ) : (
-          // Feed View – with share button on each card
+          // Feed View
           <motion.div
             key="feed-view"
             initial={{ opacity: 0 }}
@@ -1178,7 +1248,7 @@ export default function Feed() {
                             <img
                               src={article.imageUrl}
                               alt="cover"
-                              className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
+                              className="w-full h-full object-contain bg-neutral-900 group-hover:scale-105 transition-transform duration-700 ease-out"
                               loading="lazy"
                             />
                           </div>
@@ -1196,11 +1266,10 @@ export default function Feed() {
 
                       {/* Actions Row: Share + Admin buttons */}
                       <div className="mt-4 flex items-center justify-center gap-3 w-full sm:w-[90%] md:w-[85%] lg:w-[50%]">
-                        {/* Share Button for this article */}
                         <div className="relative share-dropdown">
                           <button
                             onClick={(e) => {
-                              e.stopPropagation(); // prevent opening article
+                              e.stopPropagation();
                               setShareOpenFor(shareOpenFor === articleId ? null : articleId);
                             }}
                             className="p-1.5 text-neutral-400 hover:text-white transition-colors"
@@ -1273,7 +1342,6 @@ export default function Feed() {
                           </AnimatePresence>
                         </div>
 
-                        {/* Admin actions */}
                         {isAdmin && (
                           <>
                             <button
@@ -1331,6 +1399,15 @@ export default function Feed() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Crop Modal */}
+      {showCropModal && formImage && (
+        <CropModal
+          imageFile={formImage}
+          onCropComplete={handleCropComplete}
+          onCancel={handleCropCancel}
+        />
+      )}
 
       {/* Confirm Modal */}
       <ConfirmModal
