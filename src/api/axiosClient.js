@@ -131,7 +131,7 @@ export const sendContactMessage = async (data) => {
 };
 
 export const fetchArticleById = async (id) => {
-  const response = await apiClient.get(`/articles/${id}`);
+  const response = await apiClient.get(`/posts/${id}`);
   return response.data;
 };
 
