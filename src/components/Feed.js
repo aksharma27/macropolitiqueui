@@ -24,11 +24,12 @@ import {
   verifyArticleOtp,
   checkEmailVerified,
   updatePost,
+  fetchArticleById,   // <-- NEW: function to fetch a single article by ID
 } from '../api/axiosClient';
 import LogoutButton from './LogoutButton';
 import ErrorComponent from './ErrorComponent';
 import ContactFooter from './ContactFooter';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom'; // <-- ADDED useLocation
 import CropModal from './CropModal';
 
 // ===== Custom SVG icons for LinkedIn and WhatsApp =====
@@ -129,11 +130,13 @@ export default function Feed() {
   const [error, setError] = useState(null);
   const observerTarget = useRef(null);
   const navigate = useNavigate();
+  const location = useLocation(); // <-- NEW: for reading query parameters
   const isAdmin = localStorage.getItem('userRole') === 'admin';
 
   const initialLoadDone = useRef(false);
   const initialLoadInProgress = useRef(false);
   const observerSetupDone = useRef(false);
+  const isOpeningFromLink = useRef(false); // <-- NEW: prevent race conditions
 
   // Search & sort states
   const [searchQuery, setSearchQuery] = useState('');
@@ -181,6 +184,34 @@ export default function Feed() {
   const [formImage, setFormImage] = useState(null);
   const [formImagePreview, setFormImagePreview] = useState(null);
   const [showCropModal, setShowCropModal] = useState(false);
+
+  // ===== NEW: Handle sharing link =====
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const articleId = params.get('article');
+    if (articleId) {
+      // If already showing this article, do nothing
+      if (selectedArticle && selectedArticle._id === articleId) return;
+      isOpeningFromLink.current = true;
+      fetchArticleById(articleId)
+        .then((article) => {
+          setSelectedArticle(article);
+          isOpeningFromLink.current = false;
+        })
+        .catch((err) => {
+          console.error('Failed to fetch article from share link:', err);
+          isOpeningFromLink.current = false;
+          // Clear invalid parameter
+          navigate('/', { replace: true });
+        });
+    } else {
+      // If no article param, and we have a selected article that was opened via link,
+      // but now the param is gone (e.g., user manually removed it), we could clear it.
+      // However, we want to keep the article open if it was manually selected.
+      // We'll only clear if the selected article came from a link and now there's no param.
+      // But we handle that in the back button.
+    }
+  }, [location.search, selectedArticle, navigate]);
 
   // Debounce search
   useEffect(() => {
@@ -980,6 +1011,8 @@ export default function Feed() {
                   setSelectedArticle(null);
                   setIsEditing(false);
                   setShareOpenFor(null);
+                  // Remove the article query param when going back
+                  navigate('/', { replace: true });
                 }}
                 className="flex items-center space-x-2 text-neutral-400 hover:text-white transition-colors py-2"
               >
@@ -1219,7 +1252,11 @@ export default function Feed() {
                       className="group w-full cursor-pointer border-b border-neutral-900 pb-12 flex flex-col items-center"
                     >
                       <div
-                        onClick={() => setSelectedArticle(article)}
+                        onClick={() => {
+                          setSelectedArticle(article);
+                          // Update URL with article ID for shareable link
+                          navigate(`/?article=${articleId}`, { replace: true });
+                        }}
                         className="w-full flex flex-col items-center"
                       >
                         <div className="w-full sm:w-[90%] md:w-[85%] lg:w-[50%] text-center">

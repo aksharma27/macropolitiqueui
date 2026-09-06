@@ -130,4 +130,9 @@ export const sendContactMessage = async (data) => {
   return response.data;
 };
 
+export const fetchArticleById = async (id) => {
+  const response = await api.get(`/articles/${id}`);
+  return response.data;
+};
+
 export default apiClient;
